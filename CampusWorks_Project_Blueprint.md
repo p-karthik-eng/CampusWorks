@@ -3,11 +3,11 @@
 
 ---
 
-## 🎯 Project Overview
+## Project Overview
 
 **CampusWorks** is a platform where students can post offline record/assignment tasks they need help with, along with a budget. Other students can view these tasks, place bids within a limited time window, and the lowest bidder gets assigned. The assigned student completes the work offline, notifies completion, the task owner verifies offline and accepts online, then payment is processed.
 
-**🎯 KEY POINT: Single Role System**
+** KEY POINT: Single Role System**
 - **All users are STUDENTs by default** (except one admin)
 - **Same person can both post tasks AND bid on tasks**
 - **No complex role management needed**
@@ -19,14 +19,14 @@
 3. **Lowest bidder wins** and gets assigned
 4. **Assigned student completes work** offline and notifies completion
 5. **Task owner verifies work** offline and accepts online
-6. **Payment processed** through escrow system
+6. **Payment processed** through escrow system //we didn't build this system yet
 7. **Chat communication** for task clarification
 
-**💡 Note**: The same person can be both a task poster AND a task bidder - they're all students!
+**  Note**: The same person can be both a task poster AND a task bidder - they're all students!
 
 ---
 
-## 🏗️ System Architecture
+##  System Architecture
 
 ### Microservices Architecture with API Gateway Pattern
 - **Eureka Server** - Service Discovery & Registration
@@ -41,7 +41,7 @@
 
 ---
 
-## 🔐 Security & Authentication Strategy
+##  Security & Authentication Strategy
 
 ### JWT-Based Security via API Gateway
 - **Single JWT validation** at API Gateway level
@@ -206,56 +206,10 @@
 - Task assignment happens when bidding period ends
 - **Context**: When bidding, user is acting as a STUDENT helping others
 
----
 
-### 6. **Payment Service** (Port: 9004)
-**Purpose**: Escrow system, payment processing
-**Technology**: Spring Boot, Spring Security, MySQL
-**Responsibilities**:
-- Hold payments in escrow
-- Release payments upon task completion
-- Handle refunds if needed
-- Payment status tracking
 
-**Database**: `campusworks_payment`
-**Key Endpoints**:
-- `GET /escrows` - List all escrow transactions (ADMIN only)
-- `POST /escrows` - Create escrow (hold payment)
-- `POST /escrows/{id}/release` - Release payment to worker
-- `POST /escrows/{id}/refund` - Refund payment to student
 
-**Business Logic**:
-- Payment held in escrow when task assigned
-- Released to task bidder when task completed and accepted
-- Refunded to task owner if task rejected
-- Status tracking: HELD → RELEASED/REFUNDED
-
----
-
-### 7. **Notification Service** (Port: 9005)
-**Purpose**: Real-time notifications, messaging
-**Technology**: Spring Boot, MongoDB
-**Responsibilities**:
-- Send notifications for task updates
-- Handle real-time messaging
-- Notification delivery tracking
-- User notification preferences
-
-**Database**: `campusworks_notifications` (MongoDB)
-**Key Endpoints**:
-- `GET /notifications` - List all notifications (ADMIN only)
-- `GET /notifications/user/{userId}` - Get user's notifications
-- `POST /notifications` - Create new notification
-- `POST /notifications/{id}/deliver` - Mark notification as delivered
-
-**Business Logic**:
-- Notifications for task assignment, completion, payment
-- Real-time delivery via WebSocket (future enhancement)
-- Delivery status tracking
-
----
-
-### 8. **Profile Service** (Port: 9006)
+### 6. **Profile Service** (Port: 9006)
 **Purpose**: User profile management
 **Technology**: Spring Boot, Spring Security, MySQL
 **Responsibilities**:
@@ -279,9 +233,9 @@
 
 ---
 
-### 9. **Chat Service** (Port: 9007) - Future Enhancement
+### 7. **Chat Service** (Port: 9007) - Future Enhancement
 **Purpose**: Real-time communication between users
-**Technology**: Spring Boot, WebSocket, Redis
+**Technology**: Spring Boot, WebSocket, MongoDB
 **Responsibilities**:
 - Real-time messaging
 - Chat room management
@@ -303,12 +257,10 @@
 1. **campusworks_auth** - Users, roles, authentication
 2. **campusworks_tasks** - Task information, status
 3. **campusworks_bids** - Bidding data, auction history
-4. **campusworks_payment** - Escrow transactions, payments
-5. **campusworks_profile** - User profiles, preferences
+4. **campusworks_profile** - User profiles, preferences
 
 ### MongoDB Collections
-1. **campusworks_notifications** - Notifications, messages
-2. **campusworks_chat** - Chat messages, conversations (future)
+1. **campusworks_chat** - Chat messages, conversations (future)
 
 ---
 
@@ -628,7 +580,7 @@ spring.cloud.gateway.globalcors.cors-configurations.[/**].allow-credentials=true
 
 ---
 
-## 🎯 Final Implementation Summary
+##  Final Implementation Summary
 
 ### What We're Building
 **CampusWorks** - A peer-to-peer academic task outsourcing platform where:

@@ -9,6 +9,8 @@ public class Test {
 		
 		LocalDateTime minCompletionDeadline = biddingDeadline.plusHours(24);
 		System.out.println(minCompletionDeadline);
+		
+		Integer x = 10;
 
 	}
 }
