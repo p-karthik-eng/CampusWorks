@@ -22,6 +22,8 @@
 6. **Payment processed** through escrow system //we didn't build this system yet
 7. **Chat communication** for task clarification
 
+
+
 **  Note**: The same person can be both a task poster AND a task bidder - they're all students!
 
 ---
@@ -34,8 +36,6 @@
 - **Auth Service** - User authentication, authorization, role management
 - **Task Service** - Task CRUD operations, status management
 - **Bidding Service** - Bid management, auction logic
-- **Payment Service** - Escrow system, payment processing
-- **Notification Service** - Real-time notifications, messaging
 - **Profile Service** - User profile management
 - **Chat Service** - Real-time communication between users
 
@@ -207,8 +207,6 @@
 - **Context**: When bidding, user is acting as a STUDENT helping others
 
 
-
-
 ### 6. **Profile Service** (Port: 9006)
 **Purpose**: User profile management
 **Technology**: Spring Boot, Spring Security, MySQL
@@ -235,7 +233,7 @@
 
 ### 7. **Chat Service** (Port: 9007) - Future Enhancement
 **Purpose**: Real-time communication between users
-**Technology**: Spring Boot, WebSocket, MongoDB
+**Technology**: Nodejs, WebSocket, Mongodb
 **Responsibilities**:
 - Real-time messaging
 - Chat room management
@@ -302,20 +300,18 @@
 ### Phase 2: Core Business Logic
 1. **Task Service** - Task management
 2. **Bidding Service** - Auction system
-3. **Payment Service** - Escrow system
-4. **Integration testing** - Service communication
+3. **Integration testing** - Service communication
 
 ### Phase 3: Enhanced Features
 1. **Profile Service** - User profiles
-2. **Notification Service** - Messaging system
+2.  **Chat Service** - Real-time communication
 3. **Advanced security** - Role-based access control
 4. **Performance optimization** - Caching, load balancing
 
 ### Phase 4: Advanced Features
-1. **Chat Service** - Real-time communication
-2. **File upload** - Document sharing
+
 3. **Advanced analytics** - Reporting, metrics
-4. **Production deployment** - Docker, Kubernetes
+4. **Production deployment** - Docker..
 
 ---
 
@@ -335,7 +331,7 @@
 
 ### Log Categories
 - **Authentication**: Login, logout, registration attempts
-- **Business Logic**: Task creation, bidding, payment processing
+- **Business Logic**: Task creation, bidding
 - **Security**: Authorization failures, validation errors
 - **Performance**: Slow queries, timeouts
 - **Integration**: Service-to-service communication
@@ -442,7 +438,6 @@ public List<Task> getMyTasks(@RequestHeader("X-User-Id") Long userId) {
 - **Sample users** - Different roles and scenarios
 - **Sample tasks** - Various task types and statuses
 - **Sample bids** - Different bidding scenarios
-- **Sample payments** - Various payment states
 
 ---
 
@@ -475,13 +470,11 @@ public List<Task> getMyTasks(@RequestHeader("X-User-Id") Long userId) {
 ### Phase 2: Core Services
 - [ ] Task Service implementation
 - [ ] Bidding Service implementation
-- [ ] Payment Service implementation
 - [ ] Service integration testing
 - [ ] Basic workflow testing
 
 ### Phase 3: Enhancement
 - [ ] Profile Service
-- [ ] Notification Service
 - [ ] Advanced security
 - [ ] Performance optimization
 - [ ] Comprehensive testing
@@ -501,8 +494,6 @@ public List<Task> getMyTasks(@RequestHeader("X-User-Id") Long userId) {
 - [ ] User registration and login working
 - [ ] Task creation and management functional
 - [ ] Bidding system operational
-- [ ] Payment processing working
-- [ ] Real-time notifications functional
 - [ ] Role-based access control enforced
 
 ### Non-Functional Requirements
