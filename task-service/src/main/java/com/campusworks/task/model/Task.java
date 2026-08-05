@@ -39,8 +39,7 @@ public class Task {
     private String description;
     
     @NotNull(message = "Budget is required")
-    @DecimalMin(value = "50.0", message = "Task budget must be at least ₹50.00")
-    @DecimalMax(value = "10000.0", message = "Task budget cannot exceed ₹10,000.00")
+    @DecimalMin(value = "0.0", message = "Task budget must be non-negative")
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal budget;
     
@@ -132,6 +131,13 @@ public class Task {
     }
     
     /**
+     * Check if task is pending confirmation
+     */
+    public boolean isPendingConfirmation() {
+        return status == TaskStatus.PENDING_CONFIRMATION;
+    }
+    
+    /**
      * Check if task is cancelled
      */
     public boolean isCancelled() {
@@ -150,19 +156,19 @@ public class Task {
     }
     
     /**
-     * Mark task as completed
+     * Mark task as completed (by worker, changes status to PENDING_CONFIRMATION)
      */
     public void markAsCompleted() {
-        this.status = TaskStatus.COMPLETED;
+        this.status = TaskStatus.PENDING_CONFIRMATION;
         this.completedAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
     
     /**
-     * Accept completed task
+     * Accept completed task (by owner/requester, changes status to COMPLETED)
      */
     public void acceptTask() {
-        this.status = TaskStatus.ACCEPTED;
+        this.status = TaskStatus.COMPLETED;
         this.acceptedAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -206,9 +212,10 @@ public class Task {
     public enum TaskStatus {
         OPEN("Open for Bidding"),
         IN_PROGRESS("In Progress"),
+        PENDING_CONFIRMATION("Pending Confirmation"),
         COMPLETED("Completed"),
-        ACCEPTED("Accepted"),
-        CANCELLED("Cancelled");
+        CANCELLED("Cancelled"),
+        DISPUTED("Disputed");
         
         private final String displayName;
         

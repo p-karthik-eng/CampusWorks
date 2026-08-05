@@ -82,8 +82,8 @@ const Navigation = () => {
 
   const navigationItems = [
     { label: 'Dashboard', path: ROUTES.DASHBOARD, icon: <Dashboard /> },
-    { label: 'Tasks', path: ROUTES.TASKS, icon: <Assignment /> },
-    { label: 'Bids', path: ROUTES.BIDS, icon: <Gavel /> },
+    { label: 'Task Management', path: ROUTES.MY_TASKS, icon: <Assignment /> },
+    { label: 'Work Marketplace', path: ROUTES.TASKS, icon: <Gavel /> },
     { label: 'Profile', path: ROUTES.PROFILE, icon: <Person /> }
   ];
 
@@ -145,26 +145,44 @@ const Navigation = () => {
         </Box>
 
         {/* Center - Navigation Links (Desktop Only) */}
-        <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center' }}>
-          {navigationItems.map((item) => (
-            <Button
-              key={item.path}
-              component={Link}
-              to={item.path}
-              color="inherit"
-              startIcon={item.icon}
-              sx={{
-                mx: 1,
-                color: 'text.primary',
-                backgroundColor: location.pathname === item.path ? 'rgba(0, 0, 0, 0.04)' : 'transparent',
-                '&:hover': {
-                  backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                }
-              }}
-            >
-              {item.label}
-            </Button>
-          ))}
+        <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1 }}>
+          {navigationItems.map((item) => {
+            const isActive = location.pathname === item.path || 
+              (item.path === ROUTES.MY_TASKS && location.pathname.startsWith('/my-tasks')) ||
+              (item.path === ROUTES.TASKS && location.pathname.startsWith('/tasks') && location.pathname !== ROUTES.CREATE_TASK && !location.pathname.includes('/edit'));
+            return (
+              <Button
+                key={item.path}
+                component={Link}
+                to={item.path}
+                color="inherit"
+                startIcon={React.cloneElement(item.icon, {
+                  sx: { 
+                    color: isActive ? '#31258E' : 'text.secondary',
+                    transition: 'color 0.3s ease'
+                  }
+                })}
+                sx={{
+                  px: 2,
+                  py: 1,
+                  borderRadius: '12px',
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? '#31258E' : 'text.primary',
+                  backgroundColor: isActive ? 'rgba(49, 37, 142, 0.08)' : 'transparent',
+                  border: '1px solid',
+                  borderColor: isActive ? 'rgba(49, 37, 142, 0.15)' : 'transparent',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  '&:hover': {
+                    backgroundColor: isActive ? 'rgba(49, 37, 142, 0.12)' : 'rgba(0, 0, 0, 0.03)',
+                    borderColor: isActive ? 'rgba(49, 37, 142, 0.25)' : 'rgba(0, 0, 0, 0.05)',
+                    transform: 'translateY(-1px)'
+                  }
+                }}
+              >
+                {item.label}
+              </Button>
+            );
+          })}
         </Box>
 
         {/* Right Side - Mobile & Desktop Menus */}
@@ -351,22 +369,33 @@ const Navigation = () => {
         <Divider />
 
         {/* Navigation Links */}
-        {navigationItems.map((item) => (
-          <MenuItem
-            key={item.path}
-            onClick={() => handleNavigation(item.path)}
-            selected={location.pathname === item.path}
-            sx={{
-              backgroundColor: location.pathname === item.path ? 'rgba(25, 118, 210, 0.08)' : 'transparent',
-              '&:hover': {
-                backgroundColor: 'rgba(25, 118, 210, 0.04)'
-              }
-            }}
-          >
-            {item.icon}
-            <Typography sx={{ ml: 1 }}>{item.label}</Typography>
-          </MenuItem>
-        ))}
+        {navigationItems.map((item) => {
+          const isActive = location.pathname === item.path || 
+            (item.path === ROUTES.MY_TASKS && location.pathname.startsWith('/my-tasks')) ||
+            (item.path === ROUTES.TASKS && location.pathname.startsWith('/tasks') && location.pathname !== ROUTES.CREATE_TASK && !location.pathname.includes('/edit'));
+          return (
+            <MenuItem
+              key={item.path}
+              onClick={() => handleNavigation(item.path)}
+              selected={isActive}
+              sx={{
+                py: 1.5,
+                px: 2.5,
+                borderRadius: '8px',
+                mx: 1,
+                my: 0.5,
+                color: isActive ? '#31258E' : 'text.primary',
+                backgroundColor: isActive ? 'rgba(49, 37, 142, 0.08) !important' : 'transparent',
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                }
+              }}
+            >
+              {React.cloneElement(item.icon, { sx: { color: isActive ? '#31258E' : 'text.secondary' } })}
+              <Typography sx={{ ml: 2, fontWeight: isActive ? 600 : 500 }}>{item.label}</Typography>
+            </MenuItem>
+          );
+        })}
 
         <Divider />
 

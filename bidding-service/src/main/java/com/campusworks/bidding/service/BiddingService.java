@@ -325,22 +325,25 @@ public class BiddingService {
             
             Bid savedBid = bidRepository.save(bid);
             
-            // Update task acceptance timestamp in Task Service via Feign Client
-            TaskUpdateResponse acceptRequest = TaskUpdateResponse.builder()
+            // Update task assignment in Task Service via Feign Client
+            TaskAssignmentRequest assignRequest = TaskAssignmentRequest.builder()
                 .taskId(bid.getTaskId())
+                .assignedUserId(bid.getBidderId())
+                .assignedUserEmail(bid.getBidderEmail())
+                .assignedAt(LocalDateTime.now())
+                .winningBidAmount(bid.getAmount())
+                .winningBidProposal(bid.getProposal())
                 .status("IN_PROGRESS")
-                .message("Bid accepted: " + bid.getProposal())
-                .updatedAt(LocalDateTime.now())
-                .acceptedAt(savedBid.getAcceptedAt()) // Sync accepted_at timestamp
+                .message("Bid manually accepted: " + bid.getProposal())
                 .success(true)
                 .build();
             
             try {
-                taskServiceClient.acceptTask(bid.getTaskId(), acceptRequest);
-                log.info("✅ Task acceptance timestamp synchronized for task ID: {} at {}", 
-                        bid.getTaskId(), savedBid.getAcceptedAt());
+                taskServiceClient.assignTask(bid.getTaskId(), assignRequest);
+                log.info("✅ Task assignment synchronized for task ID: {} with bidder ID: {}", 
+                        bid.getTaskId(), bid.getBidderId());
             } catch (Exception e) {
-                log.warn("⚠️ Failed to synchronize task acceptance timestamp: {}", e.getMessage());
+                log.warn("⚠️ Failed to synchronize task assignment: {}", e.getMessage());
                 // Continue with bid acceptance even if task service update fails
             }
             
@@ -624,12 +627,8 @@ public class BiddingService {
             throw new RuntimeException("Bid amount is required");
         }
         
-        if (bid.getAmount().compareTo(minBidAmount) < 0) {
-            throw new RuntimeException("Bid amount must be at least ₹" + minBidAmount);
-        }
-        
-        if (bid.getAmount().compareTo(maxBidAmount) > 0) {
-            throw new RuntimeException("Bid amount cannot exceed ₹" + maxBidAmount);
+        if (bid.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("Bid amount must be a positive number");
         }
     }
     
@@ -1317,5 +1316,38 @@ public class BiddingService {
             log.error("❌ Error auto-cancelling task ID: {}. Error: {}", taskId, e.getMessage(), e);
             throw new RuntimeException("Failed to auto-cancel task: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Complete the winning bid for a task (called by Payment Service when escrow is released)
+     */
+    public Bid completeBidForTask(Long taskId) {
+        log.info("🏁 Completing bid for task ID: {}", taskId);
+        
+        Bid bid = bidRepository.findByTaskIdAndIsAcceptedTrue(taskId)
+                .orElseThrow(() -> new RuntimeException("No accepted bid found for task ID: " + taskId));
+        
+        // Update bid status to COMPLETED
+        bid.setStatus(Bid.BidStatus.COMPLETED);
+        bid.setUpdatedAt(LocalDateTime.now());
+        Bid savedBid = bidRepository.save(bid);
+        log.info("✅ Bid ID: {} marked as COMPLETED for task ID: {}", savedBid.getId(), taskId);
+        
+        // Send email notification to bidder
+        try {
+            var taskResponse = taskServiceClient.getTaskById(taskId);
+            if (taskResponse != null) {
+                mailService.sendWorkAcceptanceEmailToBidder(
+                    savedBid.getBidderEmail(),
+                    taskResponse.getTitle(),
+                    taskResponse.getOwnerEmail()
+                );
+                log.info("📧 Work acceptance email sent to bidder: {}", savedBid.getBidderEmail());
+            }
+        } catch (Exception e) {
+            log.warn("⚠️ Failed to send work completion notification email: {}", e.getMessage());
+        }
+        
+        return savedBid;
     }
 }

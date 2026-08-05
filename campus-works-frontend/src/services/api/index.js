@@ -118,7 +118,11 @@ export const apiService = {
     getOpenForBidding: () => api.get(API_CONFIG.ENDPOINTS.TASKS.OPEN_FOR_BIDDING),
     getByUser: (userId) => api.get(`${API_CONFIG.ENDPOINTS.TASKS.BY_USER}/${userId}`),
     getByOwnerEmail: (ownerEmail) => api.get(`${API_CONFIG.ENDPOINTS.TASKS.BY_OWNER_EMAIL}/${ownerEmail}`),
-    canEdit: (id) => api.get(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/can-edit`)
+    canEdit: (id) => api.get(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/can-edit`),
+    complete: (id) => api.post(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/complete`),
+    accept: (id) => api.post(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/accept`),
+    cancel: (id) => api.post(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/cancel`),
+    updateStatus: (id, status) => api.put(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/status`, { status })
   },
   
   // Bidding methods
@@ -135,6 +139,7 @@ export const apiService = {
     getByStatus: (status) => api.get(`${API_CONFIG.ENDPOINTS.BIDS.BY_STATUS}/${status}`),
     getWinningBid: (taskId) => api.get(`${API_CONFIG.ENDPOINTS.BIDS.BASE}/task/${taskId}/winning`),
     autoSelect: (taskId) => api.post(API_CONFIG.ENDPOINTS.BIDS.AUTO_SELECT.replace('{taskId}', taskId)),
+    accept: (bidId) => api.post(`${API_CONFIG.ENDPOINTS.BIDS.BASE}/${bidId}/accept`),
     
     // UPI ID operations
     submitUpiId: (bidId, data) => api.post(`${API_CONFIG.ENDPOINTS.BIDS.BASE}/${bidId}/submit-upi`, data),
@@ -160,12 +165,13 @@ export const apiService = {
   
   // Payment methods
   payments: {
-    getAll: (params = {}) => api.get(API_CONFIG.ENDPOINTS.PAYMENTS.BASE, { params }),
-    create: (taskId) => api.post(API_CONFIG.ENDPOINTS.PAYMENTS.CREATE.replace('{taskId}', taskId)),
-    accept: (taskId, data) => api.post(API_CONFIG.ENDPOINTS.PAYMENTS.ACCEPT.replace('{taskId}', taskId), data),
-    reject: (taskId, data) => api.post(API_CONFIG.ENDPOINTS.PAYMENTS.REJECT.replace('{taskId}', taskId), data),
-    getWallet: () => api.get(API_CONFIG.ENDPOINTS.PAYMENTS.WALLET),
-    getTransactions: (params = {}) => api.get(API_CONFIG.ENDPOINTS.PAYMENTS.TRANSACTIONS, { params })
+    getById: (id) => api.get(`${API_CONFIG.ENDPOINTS.PAYMENTS.BASE}/${id}`),
+    getByContract: (contractId) => api.get(`${API_CONFIG.ENDPOINTS.PAYMENTS.BASE}/contract/${contractId}`),
+    createOrder: (contractId) => api.post(API_CONFIG.ENDPOINTS.PAYMENTS.ORDER.replace('{contractId}', contractId)),
+    verifyPayment: (contractId, verificationData) => api.post(API_CONFIG.ENDPOINTS.PAYMENTS.VERIFY.replace('{contractId}', contractId), verificationData),
+    depositEscrow: (contractId) => api.post(API_CONFIG.ENDPOINTS.PAYMENTS.ESCROW.replace('{contractId}', contractId)),
+    releaseEscrow: (contractId) => api.post(API_CONFIG.ENDPOINTS.PAYMENTS.RELEASE.replace('{contractId}', contractId)),
+    refundEscrow: (contractId) => api.post(API_CONFIG.ENDPOINTS.PAYMENTS.REFUND.replace('{contractId}', contractId))
   }
 };
 

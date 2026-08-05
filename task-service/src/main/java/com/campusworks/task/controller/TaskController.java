@@ -48,6 +48,7 @@ public class TaskController {
                     .category(request.getCategory())
                     .ownerId(Long.parseLong(userId))
                     .ownerEmail(userEmail)
+                    .biddingDeadline(request.getBiddingDeadline())
                     .completionDeadline(request.getCompletionDeadline())
                     .build();
             
@@ -143,7 +144,7 @@ public class TaskController {
         try {
             List<Task> tasks = taskService.getTasksByAssignedUserId(userId)
                     .stream()
-                    .filter(task -> task.getStatus() == Task.TaskStatus.ACCEPTED)
+                    .filter(task -> task.getStatus() == Task.TaskStatus.COMPLETED)
                     .toList();
             
             log.info("✅ Retrieved {} completed tasks for user ID: {}", tasks.size(), userId);
@@ -199,7 +200,7 @@ public class TaskController {
         try {
             List<Task> completedTasks = taskService.getTasksByAssignedUserId(userId)
                     .stream()
-                    .filter(task -> task.getStatus() == Task.TaskStatus.ACCEPTED)
+                    .filter(task -> task.getStatus() == Task.TaskStatus.COMPLETED)
                     .toList();
             
             java.math.BigDecimal totalEarnings = completedTasks.stream()
@@ -239,7 +240,7 @@ public class TaskController {
             
             long totalTasks = allTasks.size();
             long completedTasks = allTasks.stream()
-                    .filter(task -> task.getStatus() == Task.TaskStatus.ACCEPTED)
+                    .filter(task -> task.getStatus() == Task.TaskStatus.COMPLETED)
                     .count();
             long activeTasks = allTasks.stream()
                     .filter(task -> task.getStatus() == Task.TaskStatus.IN_PROGRESS)
@@ -249,7 +250,7 @@ public class TaskController {
                     .count();
             
             java.math.BigDecimal totalEarnings = allTasks.stream()
-                    .filter(task -> task.getStatus() == Task.TaskStatus.ACCEPTED)
+                    .filter(task -> task.getStatus() == Task.TaskStatus.COMPLETED)
                     .map(Task::getBudget)
                     .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
             
@@ -395,7 +396,7 @@ public class TaskController {
             
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", "Invalid status");
-            errorResponse.put("message", "Status must be one of: OPEN, IN_PROGRESS, COMPLETED, ACCEPTED, CANCELLED");
+            errorResponse.put("message", "Status must be one of: OPEN, IN_PROGRESS, PENDING_CONFIRMATION, COMPLETED, CANCELLED, DISPUTED");
             
             return ResponseEntity.badRequest().body(errorResponse);
             
@@ -512,6 +513,7 @@ public class TaskController {
                     .description(request.getDescription())
                     .budget(request.getBudget())
                     .category(request.getCategory())
+                    .biddingDeadline(request.getBiddingDeadline())
                     .completionDeadline(request.getCompletionDeadline())
                     .build();
             
@@ -1050,6 +1052,7 @@ public class TaskController {
         private String description;
         private java.math.BigDecimal budget;
         private Task.TaskCategory category;
+        private java.time.LocalDateTime biddingDeadline;
         private java.time.LocalDateTime completionDeadline;
     }
     
@@ -1062,6 +1065,7 @@ public class TaskController {
         private String description;
         private java.math.BigDecimal budget;
         private Task.TaskCategory category;
+        private java.time.LocalDateTime biddingDeadline;
         private java.time.LocalDateTime completionDeadline;
     }
     

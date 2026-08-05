@@ -47,49 +47,40 @@ const CreateTaskForm = () => {
       description: '',
       category: '',
       budget: '',
-      deadline: ''
+      biddingDeadline: '',
+      completionDeadline: ''
     }
   });
 
   // Debug: Watch budget and deadline changes
   const budgetValue = watch('budget');
-  const deadlineValue = watch('deadline');
-  console.log('Budget value:', budgetValue, 'Deadline value:', deadlineValue, 'Form valid:', isValid, 'Errors:', errors);
+  const biddingDeadlineValue = watch('biddingDeadline');
+  const completionDeadlineValue = watch('completionDeadline');
+  console.log('Budget:', budgetValue, 'Bidding DL:', biddingDeadlineValue, 'Completion DL:', completionDeadlineValue, 'Form valid:', isValid, 'Errors:', errors);
 
   const onSubmit = async (data) => {
     try {
       // Additional validation before submission
       const budget = parseFloat(data.budget);
       
-      if (isNaN(budget) || budget < 50 || budget > 10000) {
+      if (isNaN(budget) || budget < 0) {
         console.error('Invalid budget:', budget);
         return; // Don't submit if budget is invalid
       }
       
-      // Format the deadline properly for the backend
-      let formattedDeadline = null;
-      if (data.deadline) {
-        const deadlineDate = new Date(data.deadline);
-        const now = new Date();
-        const biddingDeadline = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
-        const minCompletionDeadline = new Date(biddingDeadline.getTime() + 30 * 60 * 60 * 1000); // 30 hours after bidding deadline
-        
-        if (deadlineDate < minCompletionDeadline) {
-          console.error('Deadline validation failed: completion deadline must be at least 30 hours after bidding deadline');
-          return; // Don't submit if deadline is invalid
-        }
-        formattedDeadline = deadlineDate.toISOString();
-      }
-      
-      console.log('Original deadline from form:', data.deadline);
-      console.log('Formatted deadline for backend:', formattedDeadline);
+      // Format the deadlines properly for the backend
+      const formattedBiddingDeadline = data.biddingDeadline ? 
+        data.biddingDeadline + (data.biddingDeadline.split(':').length === 2 ? ':00' : '') : null;
+      const formattedCompletionDeadline = data.completionDeadline ? 
+        data.completionDeadline + (data.completionDeadline.split(':').length === 2 ? ':00' : '') : null;
       
       const taskData = {
         title: data.title,
         description: data.description,
         category: data.category,
         budget: budget,
-        completionDeadline: formattedDeadline // Backend expects completionDeadline
+        biddingDeadline: formattedBiddingDeadline,
+        completionDeadline: formattedCompletionDeadline
       };
 
       console.log('Sending task data:', taskData); // Debug log
@@ -274,9 +265,9 @@ const CreateTaskForm = () => {
                 control={control}
                 label="Budget (₹)"
                 type="number"
-                placeholder="Enter your budget amount (₹50 - ₹10,000)"
+                placeholder="Enter your budget amount"
                 required
-                helperText="Budget must be between ₹50 and ₹10,000"
+                helperText="Budget must be a non-negative number"
                 rules={{
                   required: '❌ Budget is required to post your task',
                   validate: {
@@ -289,15 +280,8 @@ const CreateTaskForm = () => {
                     },
                     minAmount: (value) => {
                       const num = parseFloat(value);
-                      if (num < 50) {
-                        return '❌ Minimum budget is ₹50. Please enter a higher amount.';
-                      }
-                      return true;
-                    },
-                    maxAmount: (value) => {
-                      const num = parseFloat(value);
-                      if (num > 10000) {
-                        return '❌ Maximum budget is ₹10,000. Please enter a lower amount.';
+                      if (num < 0) {
+                        return '❌ Budget cannot be negative.';
                       }
                       return true;
                     }
@@ -305,27 +289,42 @@ const CreateTaskForm = () => {
                 }}
               />
 
+              {/* Bidding Deadline */}
+              <FormField
+                name="biddingDeadline"
+                control={control}
+                label="Bidding Deadline"
+                type="datetime-local"
+                required
+                helperText="ℹ️ Note: Specify when workers should stop bidding on your task."
+                rules={{
+                  required: '❌ Bidding deadline is required',
+                  validate: (value) => {
+                    const biddingDate = new Date(value);
+                    const now = new Date();
+                    if (biddingDate <= now) {
+                      return '❌ Bidding deadline must be in the future';
+                    }
+                    return true;
+                  }
+                }}
+              />
+
               {/* Completion Deadline */}
               <FormField
-                name="deadline"
+                name="completionDeadline"
                 control={control}
                 label="Completion Deadline"
                 type="datetime-local"
                 required
-                helperText="ℹ️ Note: Your task completion deadline must be at least 30 hours after the bidding deadline time."
+                helperText="ℹ️ Note: Specify when you want the task to be completed by."
                 rules={{
-                  required: '❌ Deadline is required',
-                  validate: (value) => {
-                    const deadline = new Date(value);
-                    const now = new Date();
-                    const biddingDeadline = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
-                    const minCompletionDeadline = new Date(biddingDeadline.getTime() + 30 * 60 * 60 * 1000); // 30 hours after bidding deadline
-                    
-                    if (deadline <= now) {
-                      return '❌ Deadline must be in the future';
-                    }
-                    if (deadline < minCompletionDeadline) {
-                      return '❌ Your task completion deadline must be at least 30 hours after the bidding deadline.';
+                  required: '❌ Completion deadline is required',
+                  validate: (value, formValues) => {
+                    const completionDate = new Date(value);
+                    const biddingDate = new Date(formValues.biddingDeadline);
+                    if (completionDate <= biddingDate) {
+                      return '❌ Task completion deadline must be after the bidding deadline.';
                     }
                     return true;
                   }

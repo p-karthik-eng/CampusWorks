@@ -1,0 +1,15 @@
+# Ignore build artifacts
+target/
+*.class
+
+# Ignore environment config
+.env
+
+# Ignore IDE settings
+.settings/
+.project
+.classpath
+.factorypath
+.idea/
+*.iml
+*.iws

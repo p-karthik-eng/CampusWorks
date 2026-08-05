@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -8,7 +8,6 @@ import {
   Box,
   Card,
   CardContent,
-  CardActions,
   Button,
   Chip,
   Grid,
@@ -16,293 +15,179 @@ import {
   Alert,
   IconButton,
   Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Slider,
   Stack,
   Divider,
-  InputAdornment
+  InputAdornment,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   Assignment,
   Visibility,
   Gavel,
   Schedule,
-  AttachMoney,
-  Category,
-  Person,
-  FilterList,
-  Refresh,
-  ExpandMore,
-  Clear,
   Search,
-  TrendingUp,
-  TrendingDown,
-  ArrowBack
+  Refresh,
+  ArrowBack,
+  CheckCircle,
+  PlayCircleFilled,
+  MonetizationOn,
+  Clear,
+  FilterList
 } from '@mui/icons-material';
 import Layout from '@components/templates/Layout';
-import TaskCard from '@components/molecules/TaskCard';
+import ChatButton from '@components/chat/ChatButton';
 import { selectAuth } from '@store/slices/authSlice';
-import { ROUTES, CATEGORY_LABELS, TASK_CATEGORIES, TASK_STATUS, STATUS_LABELS } from '@constants';
+import { ROUTES, CATEGORY_LABELS, TASK_CATEGORIES } from '@constants';
 import apiService from '@services/api';
+import { showEmailSuccessToast, showEmailErrorToast } from '@services/toastService';
 
 const TasksPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const dispatch = useDispatch();
   const { user } = useSelector(selectAuth);
-  
+
+  const queryParams = new URLSearchParams(location.search);
+  const initialSection = queryParams.get('section') || 'available';
+
+  const [activeSection, setActiveSection] = useState(initialSection);
   const [tasks, setTasks] = useState([]);
   const [filteredTasks, setFilteredTasks] = useState([]);
   const [userBids, setUserBids] = useState([]);
   const [taskBidCounts, setTaskBidCounts] = useState({});
+  const [profileEarnings, setProfileEarnings] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Bid dialog states
   const [bidDialogOpen, setBidDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [bidAmount, setBidAmount] = useState('');
   const [bidProposal, setBidProposal] = useState('');
   const [placingBid, setPlacingBid] = useState(false);
+
+  // Filter states
   const [categoryFilter, setCategoryFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [budgetRange, setBudgetRange] = useState([0, 10000]);
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('desc');
-  const [showFilters, setShowFilters] = useState(false);
-  const [showMyBidsOnly, setShowMyBidsOnly] = useState(false);
 
+  // Sync state with URL search param
   useEffect(() => {
-    fetchAllTasks();
-  }, [user?.email]);
-
-  // Fetch user bids after tasks are loaded
-  useEffect(() => {
-    if (user?.email && tasks.length > 0) {
-      fetchUserBids();
+    const section = queryParams.get('section');
+    if (section && ['available', 'bids', 'active', 'completed'].includes(section)) {
+      setActiveSection(section);
     }
-  }, [user?.email, tasks]);
+  }, [location.search]);
+
+  useEffect(() => {
+    fetchMarketplaceData();
+  }, [user?.email]);
 
   useEffect(() => {
     filterTasks();
-  }, [tasks, categoryFilter, searchQuery, budgetRange, sortBy, sortOrder, showMyBidsOnly]);
+  }, [tasks, categoryFilter, searchQuery, sortBy, sortOrder]);
 
-  const fetchAllTasks = async () => {
+  const fetchMarketplaceData = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await apiService.tasks.getAll();
-      const tasksData = response.data || [];
+
+      // Fetch all tasks
+      const tasksRes = await apiService.tasks.getAll();
+      const tasksData = tasksRes.data || [];
       setTasks(tasksData);
-      
-      // Fetch bid counts for all tasks
-      if (tasksData.length > 0) {
-        const taskIds = tasksData.map(task => task.id);
-        await fetchTaskBidCounts(taskIds, tasksData);
+
+      // Fetch user's profile for earnings
+      if (user?.email) {
+        const profileRes = await apiService.profiles.getByUserEmail(user.email).catch(() => null);
+        setProfileEarnings(profileRes?.data?.totalEarnings || 0);
+
+        // Fetch user's submitted bids
+        const bidsRes = await apiService.bids.getByUserEmail(user.email);
+        setUserBids(bidsRes.data || []);
       }
-      
-    } catch (error) {
-      console.error('Error fetching tasks:', error);
-      setError('Failed to load tasks. Please try again.');
+
+      // Fetch bid counts for tasks
+      const openTasks = tasksData.filter(t => t.status === 'OPEN');
+      const countsMap = {};
+      await Promise.all(
+        openTasks.map(async (t) => {
+          try {
+            const res = await apiService.bids.getByTask(t.id);
+            countsMap[t.id] = res.data?.length || 0;
+          } catch (err) {
+            countsMap[t.id] = 0;
+          }
+        })
+      );
+      setTaskBidCounts(countsMap);
+
+    } catch (err) {
+      console.error('Error fetching marketplace data:', err);
+      setError('Failed to load marketplace information. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchUserBids = async () => {
-    try {
-      const response = await apiService.bids.getByUserEmail(user.email);
-      const allBids = response.data || [];
-      
-      // Filter out bids on tasks owned by the current user
-      // Task owners cannot bid on their own tasks, so these bids should be excluded
-      const validBids = allBids.filter(bid => {
-        // Find the task for this bid
-        const task = tasks.find(t => t.id === bid.taskId);
-        // Only include bids on tasks not owned by the current user
-        return task && task.ownerEmail !== user.email;
-      });
-      
-      setUserBids(validBids);
-    } catch (error) {
-      console.error('Error fetching user bids:', error);
-      // Don't show error for bids as it's not critical for the main functionality
-    }
-  };
-
-  const fetchTaskBidCounts = async (taskIds, tasksData = null) => {
-    try {
-      // Use passed tasksData or fallback to state
-      const tasksToUse = tasksData || tasks;
-      
-      const bidCountPromises = taskIds.map(async (taskId) => {
-        try {
-          const response = await apiService.bids.getByTask(taskId);
-          const allBids = response.data || [];
-          
-          // Find the task to get the owner email
-          const task = tasksToUse.find(t => t.id === taskId);
-          if (!task) {
-            return { taskId, count: 0 };
-          }
-          
-          // Filter out bids from the task owner
-          const validBids = allBids.filter(bid => bid.bidderEmail !== task.ownerEmail);
-          
-          return { taskId, count: validBids.length };
-        } catch (error) {
-          console.error(`Error fetching bids for task ${taskId}:`, error);
-          return { taskId, count: 0 };
-        }
-      });
-
-      const bidCounts = await Promise.all(bidCountPromises);
-      const bidCountMap = {};
-      bidCounts.forEach(({ taskId, count }) => {
-        bidCountMap[taskId] = count;
-      });
-      setTaskBidCounts(bidCountMap);
-    } catch (error) {
-      console.error('Error fetching task bid counts:', error);
-    }
+  const handleSectionChange = (section) => {
+    setActiveSection(section);
+    navigate(`${ROUTES.TASKS}?section=${section}`, { replace: true });
   };
 
   const filterTasks = () => {
-    let filtered = [...tasks];
+    let result = tasks.filter(task => task.status === 'OPEN' && task.ownerEmail !== user?.email);
 
-    // ALWAYS filter for OPEN tasks only (available for bidding)
-    filtered = filtered.filter(task => task.status === 'OPEN');
+    if (categoryFilter) {
+      result = result.filter(task => task.category === categoryFilter);
+    }
 
-    // ALWAYS filter out expired tasks (bidding deadline passed)
-    filtered = filtered.filter(task => {
-      const timeRemaining = getTimeRemaining(task.biddingDeadline);
-      return !timeRemaining.expired;
-    });
-
-    // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(task => 
-        task.title.toLowerCase().includes(query) ||
-        task.description.toLowerCase().includes(query) ||
-        task.ownerEmail.toLowerCase().includes(query)
+      result = result.filter(
+        task =>
+          task.title.toLowerCase().includes(query) ||
+          task.description.toLowerCase().includes(query)
       );
     }
 
-    // Filter by category
-    if (categoryFilter) {
-      filtered = filtered.filter(task => task.category === categoryFilter);
-    }
-
-    // Filter by budget range
-    filtered = filtered.filter(task => 
-      task.budget >= budgetRange[0] && task.budget <= budgetRange[1]
-    );
-
-    // Filter by my bids only
-    if (showMyBidsOnly && user?.email) {
-      filtered = filtered.filter(task => hasUserBidOnTask(task.id));
-    }
-
     // Sort tasks
-    filtered.sort((a, b) => {
-      let aValue, bValue;
-      
-      switch (sortBy) {
-        case 'title':
-          aValue = a.title.toLowerCase();
-          bValue = b.title.toLowerCase();
-          break;
-        case 'budget':
-          aValue = a.budget;
-          bValue = b.budget;
-          break;
-        case 'createdAt':
-          aValue = new Date(a.createdAt);
-          bValue = new Date(b.createdAt);
-          break;
-        case 'biddingDeadline':
-          aValue = new Date(a.biddingDeadline);
-          bValue = new Date(b.biddingDeadline);
-          break;
-        default:
-          aValue = new Date(a.createdAt);
-          bValue = new Date(b.createdAt);
-      }
-
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1;
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'budget') {
+        comparison = a.budget - b.budget;
+      } else if (sortBy === 'biddingDeadline') {
+        comparison = new Date(a.biddingDeadline) - new Date(b.biddingDeadline);
       } else {
-        return aValue < bValue ? 1 : -1;
+        comparison = new Date(a.createdAt) - new Date(b.createdAt);
       }
+      return sortOrder === 'desc' ? -comparison : comparison;
     });
 
-    setFilteredTasks(filtered);
+    setFilteredTasks(result);
   };
 
-  const handleViewTask = (taskId) => {
-    navigate(`${ROUTES.TASK_DETAIL.replace(':id', taskId)}`);
-  };
-
-  const handlePlaceBid = (task) => {
+  const handleOpenBidDialog = (task) => {
     setSelectedTask(task);
     setBidAmount('');
     setBidProposal('');
     setBidDialogOpen(true);
-  };
-
-  const handleSubmitBid = async () => {
-    if (!bidAmount || !bidProposal.trim()) {
-      setError('Please fill in both bid amount and proposal.');
-      return;
-    }
-
-    const bidAmountNum = parseFloat(bidAmount);
-    if (bidAmountNum < 50 || bidAmountNum > 10000) {
-      setError('Bid amount must be between ₹50 and ₹10,000.');
-      return;
-    }
-
-    if (bidAmountNum > selectedTask.budget) {
-      setError(`Your bid amount (${formatCurrency(bidAmountNum)}) cannot exceed the task budget (${formatCurrency(selectedTask.budget)}).`);
-      return;
-    }
-
-    try {
-      setPlacingBid(true);
-      setError(null);
-
-      const bidData = {
-        taskId: selectedTask.id,
-        amount: bidAmountNum,
-        proposal: bidProposal.trim()
-      };
-
-      await apiService.bids.placeBid(bidData);
-      
-      setBidDialogOpen(false);
-      setSelectedTask(null);
-      setBidAmount('');
-      setBidProposal('');
-      
-      // Refresh tasks and user bids
-      fetchAllTasks();
-      fetchUserBids();
-      
-    } catch (error) {
-      console.error('Error placing bid:', error);
-      setError('Failed to place bid. Please try again.');
-    } finally {
-      setPlacingBid(false);
-    }
   };
 
   const handleCloseBidDialog = () => {
@@ -310,34 +195,61 @@ const TasksPage = () => {
     setSelectedTask(null);
     setBidAmount('');
     setBidProposal('');
-    setError(null);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'OPEN':
-        return 'primary';
-      case 'IN_PROGRESS':
-        return 'warning';
-      case 'COMPLETED':
-        return 'success';
-      case 'ACCEPTED':
-        return 'success';
-      case 'CANCELLED':
-        return 'error';
-      default:
-        return 'default';
+  const handleSubmitBid = async () => {
+    if (!bidAmount || !bidProposal.trim()) {
+      alert('Please fill in both bid amount and proposal.');
+      return;
+    }
+
+    const amountNum = parseFloat(bidAmount);
+    if (amountNum <= 0) {
+      alert('Bid amount must be a positive number.');
+      return;
+    }
+
+    if (amountNum > selectedTask.budget) {
+      alert(`Your bid amount (${formatCurrency(amountNum)}) cannot exceed the task budget (${formatCurrency(selectedTask.budget)}).`);
+      return;
+    }
+
+    try {
+      setPlacingBid(true);
+      const bidData = {
+        taskId: selectedTask.id,
+        amount: amountNum,
+        proposal: bidProposal.trim()
+      };
+
+      await apiService.bids.placeBid(bidData);
+      dispatch(showEmailSuccessToast('bid_placed'));
+      handleCloseBidDialog();
+      
+      // Refresh data
+      await fetchMarketplaceData();
+    } catch (err) {
+      console.error('Error placing bid:', err);
+      alert(err.response?.data?.message || 'Failed to place bid. Please try again.');
+    } finally {
+      setPlacingBid(false);
     }
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const handleDeleteBid = async (bidId) => {
+    if (window.confirm('Are you sure you want to withdraw this bid?')) {
+      try {
+        setActionLoading(true);
+        await apiService.bids.delete(bidId);
+        dispatch(showEmailSuccessToast('bid_deleted'));
+        await fetchMarketplaceData();
+      } catch (err) {
+        console.error('Error deleting bid:', err);
+        alert(err.response?.data?.message || 'Failed to withdraw bid.');
+      } finally {
+        setActionLoading(false);
+      }
+    }
   };
 
   const formatCurrency = (amount) => {
@@ -349,869 +261,556 @@ const TasksPage = () => {
     }).format(amount);
   };
 
-  const getTimeRemaining = (deadline) => {
-    const now = new Date();
-    const deadlineDate = new Date(deadline);
-    const diff = deadlineDate - now;
-
-    if (diff <= 0) {
-      return { expired: true, text: 'Expired' };
-    }
-
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-    if (days > 0) {
-      return { expired: false, text: `${days}d ${hours}h ${minutes}m` };
-    } else if (hours > 0) {
-      return { expired: false, text: `${hours}h ${minutes}m` };
-    } else {
-      return { expired: false, text: `${minutes}m` };
-    }
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
-  const hasUserBidOnTask = (taskId) => {
-    return userBids.some(bid => bid.taskId === taskId);
-  };
+  // Categorize lists for worker
+  const activeWork = tasks.filter(t => 
+    t.assignedUserEmail === user?.email && 
+    (t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED' || t.status === 'PENDING_CONFIRMATION')
+  );
 
-  const canPlaceBid = (task) => {
-    // Check if user is the task owner
-    if (user?.email === task.ownerEmail) {
-      return false;
-    }
-
-    // Check if user has already placed a bid on this task
-    if (hasUserBidOnTask(task.id)) {
-      return false;
-    }
-
-    // Check if task is open
-    if (task.status !== 'OPEN') {
-      return false;
-    }
-
-    // Check if bidding deadline has passed
-    const timeRemaining = getTimeRemaining(task.biddingDeadline);
-    if (timeRemaining.expired) {
-      return false;
-    }
-
-    return true;
-  };
-
-  const clearAllFilters = () => {
-    setCategoryFilter('');
-    setSearchQuery('');
-    setBudgetRange([0, 10000]);
-    setSortBy('createdAt');
-    setSortOrder('desc');
-    setShowMyBidsOnly(false);
-  };
-
-  const getBudgetRange = () => {
-    if (tasks.length === 0) return [0, 10000];
-    const budgets = tasks.map(task => task.budget);
-    return [Math.min(...budgets), Math.max(...budgets)];
-  };
-
-  const getActiveFiltersCount = () => {
-    let count = 0;
-    if (categoryFilter) count++;
-    if (searchQuery.trim()) count++;
-    if (budgetRange[0] > 0 || budgetRange[1] < 10000) count++;
-    if (showMyBidsOnly) count++;
-    return count;
-  };
+  const completedWork = tasks.filter(t => 
+    t.assignedUserEmail === user?.email && 
+    (t.status === 'COMPLETED' || t.status === 'ACCEPTED')
+  );
 
   if (loading) {
     return (
       <Layout>
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-          <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-            <CircularProgress size={60} />
-          </Box>
+        <Container maxWidth="lg" sx={{ py: 6, display: 'flex', justifyContent: 'center' }}>
+          <CircularProgress size={60} />
         </Container>
       </Layout>
     );
   }
 
   return (
-    <Box sx={{ 
-      minHeight: '100vh',
-      background: 'transparent',
-      py: 4,
-      px: 2,
-      '@keyframes spin': {
-        '0%': {
-          transform: 'rotate(0deg)',
-        },
-        '100%': {
-          transform: 'rotate(360deg)',
-        },
-      },
-    }}>
-      <Layout>
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Layout>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Header */}
         <Box sx={{ mb: 4 }}>
-          <Box display="flex" alignItems="center" gap={2} sx={{ mb: 2 }}>
-            <Button
-              variant="outlined"
-              startIcon={<ArrowBack />}
-              onClick={() => navigate(-1)}
-              sx={{
-                borderColor: '#90caf9', // Light blue border
-                color: '#1976d2', // Blue text
-                backgroundColor: 'transparent',
-                position: 'relative',
-                overflow: 'hidden',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                '&:hover': {
-                  borderColor: '#1976d2',
-                  color: '#1976d2',
-                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                  transform: 'translateX(-4px) scale(1.05)',
-                  boxShadow: '0 8px 25px rgba(25, 118, 210, 0.3), 0 0 0 3px rgba(25, 118, 210, 0.15), inset 0 0 0 1px rgba(25, 118, 210, 0.2)',
-                  '&::before': {
-                    transform: 'translateX(0)',
-                    opacity: 1
-                  },
-                  '& .MuiButton-startIcon': {
-                    transform: 'translateX(-2px)',
-                    transition: 'transform 0.3s ease',
-                    color: '#1976d2'
-                  }
-                },
-                '&:active': {
-                  transform: 'translateX(-2px) scale(1.02)',
-                  transition: 'all 0.1s ease'
-                },
-                '&::before': {
-                  content: '""',
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  background: 'linear-gradient(45deg, rgba(25, 118, 210, 0.12), rgba(25, 118, 210, 0.06))',
-                  transform: 'translateX(-100%)',
-                  transition: 'transform 0.6s ease',
-                  opacity: 0,
-                  zIndex: 0
-                },
-                '& .MuiButton-startIcon': {
-                  position: 'relative',
-                  zIndex: 1,
-                  transition: 'transform 0.3s ease'
-                }
-              }}
-            >
-              Back
-            </Button>
-            <Typography variant="h4" component="h1">
-              Browse Tasks
-            </Typography>
-          </Box>
-          <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-            <Typography variant="body1" color="text.secondary">
-              Browse active tasks available for bidding and earn money
-            </Typography>
-            <Button
-              variant="outlined"
-              startIcon={<Refresh />}
-              onClick={fetchAllTasks}
-              sx={{
-                borderColor: '#90caf9', // Light blue border
-                color: '#1976d2', // Blue text
-                backgroundColor: 'transparent',
-                position: 'relative',
-                overflow: 'hidden',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                '&:hover': {
-                  borderColor: '#1976d2',
-                  color: '#1976d2',
-                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                  transform: 'translateY(-2px) scale(1.08)',
-                  boxShadow: '0 12px 30px rgba(25, 118, 210, 0.3), 0 0 0 3px rgba(25, 118, 210, 0.15), inset 0 0 0 1px rgba(25, 118, 210, 0.2)',
-                  '&::before': {
-                    transform: 'scale(1)',
-                    opacity: 1
-                  },
-                  '& .MuiButton-startIcon': {
-                    animation: 'spin 0.8s ease-in-out',
-                    transform: 'rotate(360deg)',
-                    color: '#1976d2'
-                  }
-                },
-                '&:active': {
-                  transform: 'translateY(0) scale(1.02)',
-                  transition: 'all 0.1s ease'
-                },
-                '&::before': {
-                  content: '""',
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  width: '0',
-                  height: '0',
-                  background: 'radial-gradient(circle, rgba(25, 118, 210, 0.15) 0%, transparent 70%)',
-                  transform: 'translate(-50%, -50%) scale(0)',
-                  transition: 'all 0.6s ease',
-                  opacity: 0,
-                  zIndex: 0
-                },
-                '& .MuiButton-startIcon': {
-                  position: 'relative',
-                  zIndex: 1,
-                  transition: 'transform 0.3s ease'
-                }
-              }}
-            >
-              Refresh
-            </Button>
-          </Box>
+          <Typography variant="h4" fontWeight={800} color="#2C3E50" gutterBottom sx={{ letterSpacing: '-0.02em' }}>
+            Work Marketplace
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Discover tasks and earn money using your campus skills.
+          </Typography>
         </Box>
 
-        {/* Error Alert */}
         {error && (
           <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
             {error}
           </Alert>
         )}
 
-        {/* Search and Filter Section */}
-        <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
-          {/* Search Bar */}
-          <Box sx={{ mb: 3 }}>
-            <TextField
-              fullWidth
-              placeholder="Search tasks by title, description, or owner..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search color="action" />
-                  </InputAdornment>
-                ),
-                endAdornment: searchQuery && (
-                  <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      onClick={() => setSearchQuery('')}
-                      edge="end"
-                    >
-                      <Clear />
-                    </IconButton>
-                  </InputAdornment>
-                )
-              }}
-            />
-          </Box>
-
-          {/* Primary Filter Dropdowns - Category and Status */}
-          <Box sx={{ mb: 3 }}>
-            <Box display="flex" alignItems="center" sx={{ mb: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: 'primary.main' }}>
-                Quick Filters
-              </Typography>
-              {categoryFilter && (
-                <Chip
-                  label="1 Active"
-                  size="small"
-                  color="primary"
-                  sx={{ ml: 2 }}
-                />
-              )}
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Showing only OPEN tasks available for bidding. Use filters below to customize your view.
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
-            <Grid container spacing={2}>
-              {/* Category Filter */}
-              <Grid item xs={12} sm={6} md={4}>
-                <FormControl fullWidth variant="outlined">
-                  <InputLabel id="category-filter-label">
-                    <Box display="flex" alignItems="center">
-                      <Category sx={{ mr: 1, fontSize: 20 }} />
-                      Category
-                    </Box>
-                  </InputLabel>
-                  <Select
-                    labelId="category-filter-label"
-                    value={categoryFilter}
-                    label={
-                      <Box display="flex" alignItems="center">
-                        <Category sx={{ mr: 1, fontSize: 20 }} />
-                        Category
-                      </Box>
-                    }
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    sx={{
-                      '& .MuiSelect-select': {
-                        display: 'flex',
-                        alignItems: 'center'
-                      }
-                    }}
-                    renderValue={(value) => (
-                      <Box display="flex" alignItems="center">
-                        <Category sx={{ mr: 1, fontSize: 18, color: 'text.secondary' }} />
-                        {value ? CATEGORY_LABELS[value] : 'All Categories'}
-                      </Box>
-                    )}
-                  >
-                    <MenuItem value="">
-                      <em>All Categories</em>
-                    </MenuItem>
-                    {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
-                      <MenuItem key={key} value={key}>
-                        <Box display="flex" alignItems="center" width="100%">
-                          <Category sx={{ mr: 1, fontSize: 18, color: 'text.secondary' }} />
-                          {label}
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              {/* Status Filter
-              <Grid item xs={12} sm={6} md={4}>
-                <FormControl fullWidth variant="outlined">
-                  <InputLabel id="status-filter-label">
-                    <Box display="flex" alignItems="center">
-                      <Assignment sx={{ mr: 1, fontSize: 20 }} />
-                      Status
-                    </Box>
-                  </InputLabel>
-                  <Select
-                    labelId="status-filter-label"
-                    value={statusFilter}
-                    label={
-                      <Box display="flex" alignItems="center">
-                        <Assignment sx={{ mr: 1, fontSize: 20 }} />
-                        Status
-                      </Box>
-                    }
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    sx={{
-                      '& .MuiSelect-select': {
-                        display: 'flex',
-                        alignItems: 'center'
-                      }
-                    }}
-                    renderValue={(value) => (
-                      <Box display="flex" alignItems="center">
-                        {value ? (
-                          <>
-                            <Chip
-                              label={value}
-                              size="small"
-                              color={getStatusColor(value)}
-                              sx={{ mr: 1, minWidth: 60 }}
-                            />
-                            {STATUS_LABELS.TASK_STATUS[value]}
-                          </>
-                        ) : (
-                          <>
-                            <Assignment sx={{ mr: 1, fontSize: 18, color: 'text.secondary' }} />
-                            All Statuses
-                          </>
-                        )}
-                      </Box>
-                    )}
-                  >
-                    <MenuItem value="">
-                      <em>All Statuses</em>
-                    </MenuItem>
-                    {Object.entries(STATUS_LABELS.TASK_STATUS).map(([key, label]) => (
-                      <MenuItem key={key} value={key}>
-                        <Box display="flex" alignItems="center" width="100%">
-                          <Chip
-                            label={key}
-                            size="small"
-                            color={getStatusColor(key)}
-                            sx={{ mr: 1, minWidth: 60 }}
-                          />
-                          {label}
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid> */}
-
-              {/* Clear Filters Button */}
-              <Grid item xs={12} sm={12} md={4}>
-                <Box display="flex" alignItems="center" height="100%">
-                  {categoryFilter && (
-                    <Button
-                      variant="outlined"
-                      startIcon={<Clear />}
-                      onClick={() => {
-                        setCategoryFilter('');
-                      }}
-                      color="secondary"
-                      fullWidth
-                      sx={{ 
-                        height: 56,
-                        borderColor: '#90caf9', // Light blue border
-                        color: '#1976d2', // Blue text
-                        backgroundColor: 'transparent',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        '&:hover': {
-                          borderColor: '#1976d2',
-                          color: '#1976d2',
-                          backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                          transform: 'translateY(-2px) scale(1.05)',
-                          boxShadow: '0 8px 25px rgba(25, 118, 210, 0.3), 0 0 0 3px rgba(25, 118, 210, 0.15)',
-                          '&::before': {
-                            transform: 'scale(1)',
-                            opacity: 1
-                          },
-                          '& .MuiButton-startIcon': {
-                            transform: 'rotate(180deg)',
-                            transition: 'transform 0.6s ease',
-                            color: '#1976d2'
-                          }
-                        },
-                        '&:active': {
-                          transform: 'translateY(0) scale(1.02)',
-                          transition: 'all 0.1s ease'
-                        },
-                        '&::before': {
-                          content: '""',
-                          position: 'absolute',
-                          top: '50%',
-                          left: '50%',
-                          width: '0',
-                          height: '0',
-                          background: 'radial-gradient(circle, rgba(25, 118, 210, 0.15) 0%, transparent 70%)',
-                          transform: 'translate(-50%, -50%) scale(0)',
-                          transition: 'all 0.6s ease',
-                          opacity: 0,
-                          zIndex: 0
-                        },
-                        '& .MuiButton-startIcon': {
-                          position: 'relative',
-                          zIndex: 1,
-                          transition: 'transform 0.3s ease'
-                        }
-                      }}
-                    >
-                      Clear Filters
-                    </Button>
-                  )}
-                </Box>
-              </Grid>
-            </Grid>
-          </Box>
-
-          {/* Advanced Filters Toggle */}
-          <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-            <Button
-              variant="text"
-              startIcon={<FilterList />}
-              onClick={() => setShowFilters(!showFilters)}
-              endIcon={getActiveFiltersCount() > 0 && (
-                <Chip 
-                  label={getActiveFiltersCount()} 
-                  size="small" 
-                  color="primary" 
-                  sx={{ ml: 1 }}
-                />
-              )}
-              sx={{ 
-                textTransform: 'none',
-                color: '#1976d2', // Blue text
-                position: 'relative',
-                overflow: 'hidden',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                '&:hover': {
-                  color: '#1565c0',
-                  backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                  transform: 'translateY(-2px) scale(1.05)',
-                  boxShadow: '0 6px 20px rgba(25, 118, 210, 0.2)',
-                  '&::before': {
-                    transform: 'scale(1)',
-                    opacity: 1
-                  },
-                  '& .MuiButton-startIcon': {
-                    transform: 'rotate(180deg)',
-                    transition: 'transform 0.6s ease',
-                    color: '#1565c0'
-                  }
-                },
-                '&:active': {
-                  transform: 'translateY(0) scale(1.02)',
-                  transition: 'all 0.1s ease'
-                },
-                '&::before': {
-                  content: '""',
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  width: '0',
-                  height: '0',
-                  background: 'radial-gradient(circle, rgba(25, 118, 210, 0.15) 0%, transparent 70%)',
-                  transform: 'translate(-50%, -50%) scale(0)',
-                  transition: 'all 0.6s ease',
-                  opacity: 0,
-                  zIndex: 0
-                },
-                '& .MuiButton-startIcon': {
-                  position: 'relative',
-                  zIndex: 1,
-                  transition: 'transform 0.3s ease'
-                }
-              }}
-            >
-              {showFilters ? 'Hide Advanced Filters' : 'Show Advanced Filters'}
-            </Button>
+        {/* Worker Navigation Cards */}
+        <Grid container spacing={2} sx={{ mb: 4 }}>
+          {[
+            {
+              id: 'available',
+              title: 'Available Tasks',
+              desc: `${filteredTasks.length} jobs open for bid`,
+              icon: <Search sx={{ fontSize: 32 }} />,
+              bg: 'white',
+              color: '#31258E',
+              onClick: () => handleSectionChange('available')
+            },
+            {
+              id: 'bids',
+              title: 'My Bids',
+              desc: `${userBids.length} bids submitted`,
+              icon: <Gavel sx={{ fontSize: 32 }} />,
+              bg: 'white',
+              color: '#FF9800',
+              onClick: () => handleSectionChange('bids')
+            },
+            {
+              id: 'active',
+              title: 'Active Work',
+              desc: `${activeWork.length} jobs in progress`,
+              icon: <PlayCircleFilled sx={{ fontSize: 32 }} />,
+              bg: 'white',
+              color: '#4CAF50',
+              onClick: () => handleSectionChange('active')
+            },
+            {
+              id: 'completed',
+              title: 'Completed Work',
+              desc: `${completedWork.length} finalized gigs`,
+              icon: <CheckCircle sx={{ fontSize: 32 }} />,
+              bg: 'white',
+              color: '#9C27B0',
+              onClick: () => handleSectionChange('completed')
+            },
+            {
+              id: 'earnings',
+              title: 'Earnings Balance',
+              desc: `${formatCurrency(profileEarnings)} earned`,
+              icon: <MonetizationOn sx={{ fontSize: 32 }} />,
+              bg: 'linear-gradient(135deg, #4CAF50 0%, #388E3C 100%)',
+              color: 'white',
+              onClick: () => {}
+            }
+          ].map((card) => {
+            const isSelected = activeSection === card.id;
+            const isStatic = card.id === 'earnings';
             
-            {getActiveFiltersCount() > 0 && (
-              <Button
-                variant="text"
-                startIcon={<Clear />}
-                onClick={clearAllFilters}
-                color="secondary"
-                sx={{ 
-                  textTransform: 'none',
-                  color: '#1976d2', // Blue text
-                  position: 'relative',
-                  overflow: 'hidden',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  '&:hover': {
-                    color: '#1565c0',
-                    backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                    transform: 'translateY(-2px) scale(1.05)',
-                    boxShadow: '0 6px 20px rgba(25, 118, 210, 0.2)',
-                    '&::before': {
-                      transform: 'scale(1)',
-                      opacity: 1
-                    },
-                    '& .MuiButton-startIcon': {
-                      transform: 'rotate(180deg)',
-                      transition: 'transform 0.6s ease',
-                      color: '#1565c0'
+            return (
+              <Grid item xs={6} md={2.4} key={card.id}>
+                <Paper
+                  onClick={isStatic ? undefined : card.onClick}
+                  sx={{
+                    p: 2.5,
+                    height: '100%',
+                    cursor: isStatic ? 'default' : 'pointer',
+                    borderRadius: '20px',
+                    border: '1px solid',
+                    borderColor: isSelected ? '#31258E' : 'rgba(0, 0, 0, 0.05)',
+                    background: card.bg,
+                    color: card.color === 'white' ? 'white' : 'text.primary',
+                    boxShadow: isSelected ? '0 10px 25px rgba(49, 37, 142, 0.15)' : 'none',
+                    transition: isStatic ? 'none' : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    '&:hover': {
+                      transform: isStatic ? 'none' : 'translateY(-4px)',
+                      boxShadow: isStatic ? 'none' : '0 12px 25px rgba(0, 0, 0, 0.06)',
+                      borderColor: isSelected || isStatic ? 'transparent' : 'rgba(0, 0, 0, 0.1)'
                     }
-                  },
-                  '&:active': {
-                    transform: 'translateY(0) scale(1.02)',
-                    transition: 'all 0.1s ease'
-                  },
-                  '&::before': {
-                    content: '""',
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    width: '0',
-                    height: '0',
-                    background: 'radial-gradient(circle, rgba(25, 118, 210, 0.15) 0%, transparent 70%)',
-                    transform: 'translate(-50%, -50%) scale(0)',
-                    transition: 'all 0.6s ease',
-                    opacity: 0,
-                    zIndex: 0
-                  },
-                  '& .MuiButton-startIcon': {
-                    position: 'relative',
-                    zIndex: 1,
-                    transition: 'transform 0.3s ease'
-                  }
-                }}
-              >
-                Clear All Filters
-              </Button>
-            )}
-          </Box>
+                  }}
+                >
+                  <Box 
+                    sx={{ 
+                      p: 1, 
+                      borderRadius: '12px', 
+                      bgcolor: card.color === 'white' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0,0,0,0.03)',
+                      color: card.color === 'white' ? 'white' : card.color,
+                      alignSelf: 'flex-start',
+                      display: 'flex'
+                    }}
+                  >
+                    {card.icon}
+                  </Box>
+                  <Box sx={{ mt: 3 }}>
+                    <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+                      {card.title}
+                    </Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.8, mt: 0.5, display: 'block' }}>
+                      {card.desc}
+                    </Typography>
+                  </Box>
+                </Paper>
+              </Grid>
+            );
+          })}
+        </Grid>
 
-          {/* Advanced Filters */}
-          {showFilters && (
-            <Accordion expanded={showFilters} sx={{ boxShadow: 'none', '&:before': { display: 'none' } }}>
-              <AccordionSummary expandIcon={<ExpandMore />} sx={{ px: 0 }}>
-                <Typography variant="h6">Advanced Filters</Typography>
-              </AccordionSummary>
-              <AccordionDetails sx={{ px: 0 }}>
+        <Divider sx={{ mb: 4 }} />
+
+        {/* Render Active Sub-section */}
+        <Paper elevation={0} sx={{ p: 3, borderRadius: '24px', border: '1px solid rgba(0,0,0,0.04)', bgcolor: 'white' }}>
+          
+          {/* 1. Available Tasks Sub-section (With Search & Filters) */}
+          {activeSection === 'available' && (
+            <Box>
+              <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+                <Typography variant="h6" fontWeight={700} color="#2C3E50">
+                  Find Work
+                </Typography>
+                <Button 
+                  startIcon={<Refresh />} 
+                  onClick={fetchMarketplaceData} 
+                  variant="outlined" 
+                  size="small"
+                  sx={{ borderRadius: '8px' }}
+                >
+                  Refresh
+                </Button>
+              </Box>
+
+              {/* Filters Block */}
+              <Grid container spacing={2} sx={{ mb: 4 }}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search tasks..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Search fontSize="small" />
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={6} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      value={categoryFilter}
+                      label="Category"
+                      onChange={(e) => setCategoryFilter(e.target.value)}
+                    >
+                      <MenuItem value="">All Categories</MenuItem>
+                      {Object.keys(TASK_CATEGORIES).map((catKey) => (
+                        <MenuItem key={catKey} value={catKey}>
+                          {CATEGORY_LABELS[catKey]}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={6} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Sort By</InputLabel>
+                    <Select
+                      value={sortBy}
+                      label="Sort By"
+                      onChange={(e) => setSortBy(e.target.value)}
+                    >
+                      <MenuItem value="createdAt">Date Posted</MenuItem>
+                      <MenuItem value="budget">Budget</MenuItem>
+                      <MenuItem value="biddingDeadline">Bidding Deadline</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Order</InputLabel>
+                    <Select
+                      value={sortOrder}
+                      label="Order"
+                      onChange={(e) => setSortOrder(e.target.value)}
+                    >
+                      <MenuItem value="asc">Ascending</MenuItem>
+                      <MenuItem value="desc">Descending</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+
+              {filteredTasks.length === 0 ? (
+                <EmptyState 
+                  title="No Tasks Found" 
+                  desc="Try adjusting your filters or search term to discover other open campus gigs." 
+                />
+              ) : (
                 <Grid container spacing={3}>
-                  {/* Sort By */}
-                  <Grid item xs={12} sm={6} md={4}>
-                    <FormControl fullWidth variant="outlined">
-                      <InputLabel>Sort By</InputLabel>
-                      <Select
-                        value={sortBy}
-                        label="Sort By"
-                        onChange={(e) => setSortBy(e.target.value)}
-                      >
-                        <MenuItem value="createdAt">Created Date</MenuItem>
-                        <MenuItem value="title">Title</MenuItem>
-                        <MenuItem value="budget">Budget</MenuItem>
-                        <MenuItem value="biddingDeadline">Bidding Deadline</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  {/* Sort Order */}
-                  <Grid item xs={12} sm={6} md={4}>
-                    <FormControl fullWidth variant="outlined">
-                      <InputLabel>Order</InputLabel>
-                      <Select
-                        value={sortOrder}
-                        label="Order"
-                        onChange={(e) => setSortOrder(e.target.value)}
-                      >
-                        <MenuItem value="desc">
-                          <Box display="flex" alignItems="center">
-                            <TrendingDown sx={{ mr: 1 }} />
-                            Descending
-                          </Box>
-                        </MenuItem>
-                        <MenuItem value="asc">
-                          <Box display="flex" alignItems="center">
-                            <TrendingUp sx={{ mr: 1 }} />
-                            Ascending
-                          </Box>
-                        </MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-
-                  {/* My Bids Filter */}
-                  {user?.email && (
-                    <Grid item xs={12} sm={12} md={4}>
-                      <FormControl fullWidth variant="outlined">
-                        <InputLabel>Show Tasks</InputLabel>
-                        <Select
-                          value={showMyBidsOnly ? 'myBids' : 'all'}
-                          label="Show Tasks"
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setShowMyBidsOnly(value === 'myBids');
+                  {filteredTasks.map((task) => {
+                    const bidCount = taskBidCounts[task.id] || 0;
+                    const hasUserBid = userBids.some(b => b.taskId === task.id);
+                    
+                    return (
+                      <Grid item xs={12} sm={6} md={4} key={task.id}>
+                        <Card 
+                          elevation={0} 
+                          sx={{ 
+                            borderRadius: '16px', 
+                            border: '1px solid rgba(0,0,0,0.06)',
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            '&:hover': {
+                              transform: 'translateY(-4px)',
+                              boxShadow: '0 8px 20px rgba(0,0,0,0.05)',
+                              borderColor: '#31258E'
+                            }
                           }}
                         >
-                          <MenuItem value="all">All Open Tasks</MenuItem>
-                          <MenuItem value="myBids">My Bids Only</MenuItem>
-                        </Select>
-                      </FormControl>
-                    </Grid>
-                  )}
-
-                  {/* Budget Range */}
-                  <Grid item xs={12}>
-                    <Box sx={{ px: 2 }}>
-                      <Typography gutterBottom>
-                        Budget Range: {formatCurrency(budgetRange[0])} - {formatCurrency(budgetRange[1])}
-                      </Typography>
-                      <Slider
-                        value={budgetRange}
-                        onChange={(e, newValue) => setBudgetRange(newValue)}
-                        valueLabelDisplay="auto"
-                        valueLabelFormat={(value) => formatCurrency(value)}
-                        min={0}
-                        max={Math.max(10000, ...tasks.map(t => t.budget))}
-                        step={100}
-                        marks={[
-                          { value: 0, label: '₹0' },
-                          { value: Math.max(10000, ...tasks.map(t => t.budget)), label: formatCurrency(Math.max(10000, ...tasks.map(t => t.budget))) }
-                        ]}
-                      />
-                    </Box>
-                  </Grid>
+                          <CardContent>
+                            <Box display="flex" justifyContent="space-between" sx={{ mb: 1.5 }}>
+                              <Chip 
+                                label={CATEGORY_LABELS[task.category] || task.category} 
+                                size="small" 
+                                sx={{ bgcolor: 'rgba(49, 37, 142, 0.05)', color: '#31258E', fontWeight: 600 }}
+                              />
+                              <Typography variant="subtitle2" fontWeight={800} color="#388E3C">
+                                {formatCurrency(task.budget)}
+                              </Typography>
+                            </Box>
+                            <Typography variant="h6" fontWeight={700} gutterBottom noWrap>
+                              {task.title}
+                            </Typography>
+                            <Typography 
+                              variant="body2" 
+                              color="text.secondary" 
+                              sx={{ 
+                                mb: 2, 
+                                display: '-webkit-box', 
+                                WebkitLineBreak: 'auto', 
+                                WebkitLineClamp: 3, 
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                height: '60px'
+                              }}
+                            >
+                              {task.description}
+                            </Typography>
+                            <Divider sx={{ my: 1.5 }} />
+                            <Box display="flex" justifyContent="space-between" alignItems="center">
+                              <Box display="flex" alignItems="center" gap={0.5}>
+                                <Gavel fontSize="small" color="action" />
+                                <Typography variant="caption" color="text.secondary">
+                                  {bidCount} bids
+                                </Typography>
+                              </Box>
+                              <Typography variant="caption" color="text.secondary">
+                                Ends: {formatDate(task.biddingDeadline)}
+                              </Typography>
+                            </Box>
+                          </CardContent>
+                          <Box sx={{ p: 2, pt: 0 }}>
+                            {hasUserBid ? (
+                              <Button 
+                                fullWidth 
+                                variant="outlined" 
+                                color="warning"
+                                onClick={() => navigate(ROUTES.TASK_DETAIL.replace(':id', task.id))}
+                                sx={{ borderRadius: '8px', textTransform: 'none' }}
+                              >
+                                View Submitted Bid
+                              </Button>
+                            ) : (
+                              <Button 
+                                fullWidth 
+                                variant="contained" 
+                                color="primary"
+                                onClick={() => handleOpenBidDialog(task)}
+                                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#31258E', '&:hover': { bgcolor: '#221966' } }}
+                              >
+                                Bid on Task
+                              </Button>
+                            )}
+                          </Box>
+                        </Card>
+                      </Grid>
+                    );
+                  })}
                 </Grid>
-              </AccordionDetails>
-            </Accordion>
+              )}
+            </Box>
           )}
 
-          {/* Active Filters Display */}
-          {getActiveFiltersCount() > 0 && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Active Filters:
+          {/* 2. My Bids Sub-section */}
+          {activeSection === 'bids' && (
+            <Box>
+              <Typography variant="h6" fontWeight={700} color="#2C3E50" sx={{ mb: 3 }}>
+                Submitted Bids
               </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                {categoryFilter && (
-                  <Chip
-                    label={`Category: ${CATEGORY_LABELS[categoryFilter]}`}
-                    onDelete={() => setCategoryFilter('')}
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                  />
-                )}
-                {searchQuery && (
-                  <Chip
-                    label={`Search: "${searchQuery}"`}
-                    onDelete={() => setSearchQuery('')}
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                  />
-                )}
-                {(budgetRange[0] > 0 || budgetRange[1] < 10000) && (
-                  <Chip
-                    label={`Budget: ${formatCurrency(budgetRange[0])} - ${formatCurrency(budgetRange[1])}`}
-                    onDelete={() => setBudgetRange([0, 10000])}
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                  />
-                )}
-                {showMyBidsOnly && (
-                  <Chip
-                    label="My Bids Only"
-                    onDelete={() => setShowMyBidsOnly(false)}
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                  />
-                )}
-              </Stack>
+              {userBids.length === 0 ? (
+                <EmptyState 
+                  title="No Bids Yet" 
+                  desc="Browse available tasks to start submitting bids and earn money." 
+                  actionLabel="Search Tasks"
+                  onAction={() => handleSectionChange('available')}
+                />
+              ) : (
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600 }}>Task Title</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Bid Amount</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Proposal</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {userBids.map((bid) => (
+                        <TableRow key={bid.id} hover>
+                          <TableCell>
+                            <Typography 
+                              variant="subtitle2" 
+                              fontWeight={700}
+                              color="primary"
+                              onClick={() => navigate(ROUTES.TASK_DETAIL.replace(':id', bid.taskId))}
+                              sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                            >
+                              {bid.taskTitle || `Task #${bid.taskId}`}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Submitted: {formatDate(bid.createdAt)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>{formatCurrency(bid.amount)}</TableCell>
+                          <TableCell sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {bid.proposal}
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={bid.status} />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Box display="flex" justifyContent="flex-end" gap={1}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => navigate(ROUTES.TASK_DETAIL.replace(':id', bid.taskId))}
+                                sx={{ borderRadius: '8px', textTransform: 'none' }}
+                              >
+                                Details
+                              </Button>
+                              {bid.status === 'PENDING' && (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="error"
+                                  disabled={actionLoading}
+                                  onClick={() => handleDeleteBid(bid.id)}
+                                  sx={{ borderRadius: '8px', textTransform: 'none' }}
+                                >
+                                  Withdraw
+                                </Button>
+                              )}
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </Box>
+          )}
+
+          {/* 3. Active Work Sub-section */}
+          {activeSection === 'active' && (
+            <Box>
+              <Typography variant="h6" fontWeight={700} color="#2C3E50" sx={{ mb: 3 }}>
+                Active Work (Contracts In Progress)
+              </Typography>
+              {activeWork.length === 0 ? (
+                <EmptyState 
+                  title="No Active Work" 
+                  desc="Submit bids and win projects. You will be able to complete tasks and receive escrow payments here." 
+                />
+              ) : (
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600 }}>Task Title</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Requester</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Contract Price</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {activeWork.map((task) => (
+                        <TableRow key={task.id} hover>
+                          <TableCell>
+                            <Typography 
+                              variant="subtitle2" 
+                              fontWeight={700} 
+                              color="primary" 
+                              onClick={() => navigate(ROUTES.TASK_DETAIL.replace(':id', task.id))}
+                              sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                            >
+                              {task.title}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Deadline: {formatDate(task.completionDeadline)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{task.ownerEmail}</TableCell>
+                          <TableCell sx={{ fontWeight: 700, color: '#388E3C' }}>{formatCurrency(task.budget)}</TableCell>
+                          <TableCell>
+                            <StatusBadge status={task.status} />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Box display="flex" justifyContent="flex-end" gap={1}>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => navigate(ROUTES.TASK_DETAIL.replace(':id', task.id))}
+                                sx={{ borderRadius: '8px', textTransform: 'none', bgcolor: '#31258E', '&:hover': { bgcolor: '#221966' } }}
+                              >
+                                View Contract
+                              </Button>
+                              <ChatButton currentUser={user} taskTitle={task.title} recipientEmail={task.ownerEmail} taskId={task.id} size="small" />
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </Box>
+          )}
+
+          {/* 4. Completed Work Sub-section */}
+          {activeSection === 'completed' && (
+            <Box>
+              <Typography variant="h6" fontWeight={700} color="#2C3E50" sx={{ mb: 3 }}>
+                Completed Work & Earnings
+              </Typography>
+              {completedWork.length === 0 ? (
+                <EmptyState 
+                  title="No Completed Tasks" 
+                  desc="Completed gigs and earnings history will appear here once requesters release escrow funds." 
+                />
+              ) : (
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600 }}>Task Title</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Payer</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Earnings Released</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {completedWork.map((task) => (
+                        <TableRow key={task.id} hover>
+                          <TableCell>
+                            <Typography variant="subtitle2" fontWeight={700}>
+                              {task.title}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Completed: {formatDate(task.completedAt || task.updatedAt)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{task.ownerEmail}</TableCell>
+                          <TableCell sx={{ fontWeight: 700, color: '#388E3C' }}>{formatCurrency(task.budget)}</TableCell>
+                          <TableCell>
+                            <StatusBadge status={task.status} />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => navigate(ROUTES.TASK_DETAIL.replace(':id', task.id))}
+                              sx={{ borderRadius: '8px', textTransform: 'none' }}
+                            >
+                              View Contract
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
             </Box>
           )}
         </Paper>
-
-        {/* Results Summary */}
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Showing {filteredTasks.length} open tasks available for bidding
-            {getActiveFiltersCount() > 0 && ' (filtered)'}
-          </Typography>
-        </Box>
-
-        {/* Tasks List */}
-        {filteredTasks.length === 0 ? (
-          <Paper sx={{ p: 4, textAlign: 'center' }}>
-            <Assignment sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h5" gutterBottom>
-              No Tasks Found
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-              {tasks.length === 0 
-                ? 'No tasks have been created yet.' 
-                : getActiveFiltersCount() > 0 
-                  ? 'No open tasks match your current filters. Try adjusting your search criteria.'
-                  : 'No open tasks are available for bidding at the moment.'}
-            </Typography>
-            {getActiveFiltersCount() > 0 && (
-              <Button
-                variant="contained"
-                startIcon={<Clear />}
-                onClick={clearAllFilters}
-                sx={{ 
-                  mt: 1,
-                  background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
-                  color: '#1976d2',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  '&:hover': {
-                    background: 'linear-gradient(135deg, #bbdefb 0%, #90caf9 100%)',
-                    color: '#1565c0',
-                    transform: 'translateY(-2px) scale(1.05)',
-                    boxShadow: '0 8px 25px rgba(25, 118, 210, 0.3), 0 0 0 3px rgba(25, 118, 210, 0.15)',
-                    '&::before': {
-                      transform: 'scale(1)',
-                      opacity: 1
-                    },
-                    '& .MuiButton-startIcon': {
-                      transform: 'rotate(180deg)',
-                      transition: 'transform 0.6s ease',
-                      color: '#1565c0'
-                    }
-                  },
-                  '&:active': {
-                    transform: 'translateY(0) scale(1.02)',
-                    transition: 'all 0.1s ease'
-                  },
-                  '&::before': {
-                    content: '""',
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    width: '0',
-                    height: '0',
-                    background: 'radial-gradient(circle, rgba(25, 118, 210, 0.15) 0%, transparent 70%)',
-                    transform: 'translate(-50%, -50%) scale(0)',
-                    transition: 'all 0.6s ease',
-                    opacity: 0,
-                    zIndex: 0
-                  },
-                  '& .MuiButton-startIcon': {
-                    position: 'relative',
-                    zIndex: 1,
-                    transition: 'transform 0.3s ease'
-                  }
-                }}
-              >
-                Clear All Filters
-              </Button>
-            )}
-          </Paper>
-        ) : (
-          <Box sx={{ 
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, 1fr)',
-              md: 'repeat(3, 1fr)'
-            },
-            gap: 2, 
-            maxWidth: '100%',
-            overflowX: 'auto',
-            overflowY: 'hidden',
-            pb: 2,
-            '&::-webkit-scrollbar': {
-              height: '8px',
-            },
-            '&::-webkit-scrollbar-track': {
-              background: '#f1f1f1',
-              borderRadius: '4px',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: '#888',
-              borderRadius: '4px',
-            },
-            '&::-webkit-scrollbar-thumb:hover': {
-              background: '#555',
-            }
-          }}>
-            {filteredTasks.map((task) => {
-              const timeRemaining = getTimeRemaining(task.biddingDeadline);
-              const canBid = canPlaceBid(task);
-              
-              return (
-                <Box
-                  key={task.id}
-                  sx={{
-                    width: {
-                      xs: '100%',
-                      sm: '350px',
-                      md: '350px'
-                    },
-                    justifySelf: 'center'
-                  }}
-                >
-                  <TaskCard
-                  task={task}
-                  variant="compact"
-                  showBidCount={true}
-                  bidCount={taskBidCounts[task.id] || 0}
-                  hasUserBid={hasUserBidOnTask(task.id)}
-                  actions={{
-                    view: true,
-                    bid: canBid && user?.email !== task.ownerEmail
-                  }}
-                  onView={(task) => handleViewTask(task.id)}
-                  onBid={(task) => handlePlaceBid(task)}
-                />
-                </Box>
-              );
-            })}
-          </Box>
-        )}
 
         {/* Place Bid Dialog */}
         <Dialog open={bidDialogOpen} onClose={handleCloseBidDialog} maxWidth="sm" fullWidth>
@@ -1227,14 +826,13 @@ const TasksPage = () => {
                 value={bidAmount}
                 onChange={(e) => setBidAmount(e.target.value)}
                 sx={{ mb: 3 }}
-                placeholder="Enter your bid amount (₹50 - ₹10,000)"
-                helperText={`Task Budget: ${selectedTask ? formatCurrency(selectedTask.budget) : ''} | Your bid must be between ₹50 and ₹10,000`}
+                placeholder="Enter your bid amount"
+                helperText={`Task Budget: ${selectedTask ? formatCurrency(selectedTask.budget) : ''} | Your bid must be positive and not exceed the budget.`}
                 inputProps={{ 
-                  min: 50, 
-                  max: 10000,
+                  min: 0.01, 
                   step: 0.01
                 }}
-                error={bidAmount && (parseFloat(bidAmount) < 50 || parseFloat(bidAmount) > 10000)}
+                error={bidAmount && parseFloat(bidAmount) <= 0}
               />
               
               <TextField
@@ -1249,24 +847,96 @@ const TasksPage = () => {
               />
             </Box>
           </DialogContent>
-          <DialogActions>
+          <DialogActions sx={{ p: 3 }}>
             <Button onClick={handleCloseBidDialog} disabled={placingBid}>
               Cancel
             </Button>
-            <Button 
-              onClick={handleSubmitBid} 
-              variant="contained" 
-              disabled={placingBid || !bidAmount || !bidProposal.trim()}
-              startIcon={placingBid && <CircularProgress size={20} />}
+            <Button
+              onClick={handleSubmitBid}
+              variant="contained"
+              disabled={placingBid || !bidAmount || !bidProposal.trim() || parseFloat(bidAmount) <= 0}
+              sx={{ bgcolor: '#31258E', '&:hover': { bgcolor: '#221966' } }}
             >
-              {placingBid ? 'Placing Bid...' : 'Place Bid'}
+              {placingBid ? 'Submitting...' : 'Submit Bid'}
             </Button>
           </DialogActions>
         </Dialog>
-        </Container>
-      </Layout>
-    </Box>
+      </Container>
+    </Layout>
   );
+};
+
+// Reusable Empty State component
+const EmptyState = ({ title, desc, actionLabel, onAction }) => (
+  <Box 
+    display="flex" 
+    flexDirection="column" 
+    alignItems="center" 
+    justifyContent="center" 
+    sx={{ py: 6, px: 2, textAlign: 'center' }}
+  >
+    <Box sx={{ p: 2, borderRadius: '50%', bgcolor: 'rgba(49, 37, 142, 0.04)', color: '#31258E', mb: 2 }}>
+      <Assignment sx={{ fontSize: 48 }} />
+    </Box>
+    <Typography variant="h6" fontWeight={700} color="#2C3E50">
+      {title}
+    </Typography>
+    <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 3, maxWidth: 400 }}>
+      {desc}
+    </Typography>
+    {actionLabel && (
+      <Button 
+        variant="contained" 
+        onClick={onAction}
+        sx={{
+          borderRadius: '12px',
+          bgcolor: '#31258E',
+          px: 3,
+          py: 1,
+          '&:hover': { bgcolor: '#221966' }
+        }}
+      >
+        {actionLabel}
+      </Button>
+    )}
+  </Box>
+);
+
+// Reusable Status Badge component
+const StatusBadge = ({ status }) => {
+  let label = status;
+  let color = 'default';
+  
+  if (status === 'OPEN') {
+    label = 'Open for Bidding';
+    color = 'primary';
+  } else if (status === 'IN_PROGRESS' || status === 'ASSIGNED') {
+    label = 'In Progress';
+    color = 'warning';
+  } else if (status === 'PENDING_CONFIRMATION') {
+    label = 'Pending Verification';
+    color = 'info';
+  } else if (status === 'COMPLETED' || status === 'ACCEPTED') {
+    label = 'Completed';
+    color = 'success';
+  } else if (status === 'CANCELLED') {
+    label = 'Cancelled';
+    color = 'error';
+  } else if (status === 'PENDING') {
+    label = 'Pending Review';
+    color = 'warning';
+  } else if (status === 'ACCEPTED') {
+    label = 'Winning Bid';
+    color = 'success';
+  } else if (status === 'REJECTED') {
+    label = 'Not Selected';
+    color = 'error';
+  } else if (status === 'WITHDRAWN') {
+    label = 'Withdrawn';
+    color = 'default';
+  }
+  
+  return <Chip label={label} size="small" color={color} sx={{ fontWeight: 600 }} />;
 };
 
 export default TasksPage;

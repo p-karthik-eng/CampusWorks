@@ -1,3 +1,4 @@
+com\campusworks\bidding\service\MailService.class
 com\campusworks\bidding\controller\BidController.class
 com\campusworks\bidding\dto\TaskResponse$TaskResponseBuilder.class
 com\campusworks\bidding\model\Bid$BidBuilder.class
@@ -20,6 +21,7 @@ com\campusworks\bidding\model\Bid$BidStatus.class
 com\campusworks\bidding\dto\BiddingStatusResponse$BiddingStatusResponseBuilder.class
 com\campusworks\bidding\dto\TaskOwnershipResponse.class
 com\campusworks\bidding\repo\BidRepository.class
+com\campusworks\bidding\controller\BidController$SubmitUpiIdRequest.class
 com\campusworks\bidding\dto\TaskOwnershipResponse$TaskOwnershipResponseBuilder.class
 com\campusworks\bidding\dto\TaskStatusUpdateRequest.class
 com\campusworks\bidding\dto\BiddingStatusResponse.class

@@ -56,11 +56,11 @@ export const API_CONFIG = {
     // Payments
     PAYMENTS: {
       BASE: '/api/payments',
-      CREATE: '/api/payments/tasks/{taskId}/create',
-      ACCEPT: '/api/payments/tasks/{taskId}/accept',
-      REJECT: '/api/payments/tasks/{taskId}/reject',
-      WALLET: '/api/payments/wallet',
-      TRANSACTIONS: '/api/payments/transactions'
+      ORDER: '/api/payments/order/{contractId}',
+      VERIFY: '/api/payments/verify/{contractId}',
+      ESCROW: '/api/payments/escrow/{contractId}',
+      RELEASE: '/api/payments/release/{contractId}',
+      REFUND: '/api/payments/refund/{contractId}'
     }
   }
 };
@@ -69,11 +69,12 @@ export const API_CONFIG = {
 // Task Related Enums
 // =========================
 export const TASK_STATUS = {
-  OPEN: 'OPEN',                    // Task is available for bidding
-  IN_PROGRESS: 'IN_PROGRESS',      // Task assigned, work ongoing
-  COMPLETED: 'COMPLETED',          // Work submitted by worker
-  ACCEPTED: 'ACCEPTED',            // Work accepted by task owner
-  CANCELLED: 'CANCELLED'           // Task cancelled
+  OPEN: 'OPEN',
+  IN_PROGRESS: 'IN_PROGRESS',
+  PENDING_CONFIRMATION: 'PENDING_CONFIRMATION',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  DISPUTED: 'DISPUTED'
 };
 
 export const TASK_CATEGORIES = {

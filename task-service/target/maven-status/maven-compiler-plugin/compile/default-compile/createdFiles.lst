@@ -2,6 +2,7 @@ com\campusworks\task\controller\TaskController$AssignTaskRequest.class
 com\campusworks\task\dto\TaskCompletionRequest$TaskCompletionRequestBuilder.class
 com\campusworks\task\dto\ProfileResponse$ProfileResponseBuilder.class
 com\campusworks\task\service\TaskService.class
+com\campusworks\task\controller\TaskController$TaskCompleteRequest.class
 com\campusworks\task\dto\ProfileRatingResponse.class
 com\campusworks\task\dto\BiddingStatusResponse.class
 com\campusworks\task\client\BiddingServiceClientFallback.class
@@ -12,10 +13,12 @@ com\campusworks\task\dto\TaskAssignmentRequest$TaskAssignmentRequestBuilder.clas
 com\campusworks\task\dto\TaskAssignmentRequest.class
 com\campusworks\task\dto\TaskCompletionRequest.class
 com\campusworks\task\controller\TaskController$ExtendBiddingRequest.class
+com\campusworks\task\service\MailService.class
 com\campusworks\task\model\Task$TaskStatus.class
 com\campusworks\task\controller\TaskController$CreateTaskRequest.class
 com\campusworks\task\dto\UserEarningsResponse.class
 com\campusworks\task\controller\TaskController$UpdateTaskRequest.class
+com\campusworks\task\controller\TaskController$TaskAcceptRequest.class
 com\campusworks\task\dto\UserTaskStatisticsResponse$UserTaskStatisticsResponseBuilder.class
 com\campusworks\task\model\Task.class
 com\campusworks\task\dto\ProfileUpdateResponse$ProfileUpdateResponseBuilder.class
@@ -33,6 +36,7 @@ com\campusworks\task\controller\TaskController.class
 com\campusworks\task\dto\UserEarningsResponse$UserEarningsResponseBuilder.class
 com\campusworks\task\dto\ProfileResponse.class
 com\campusworks\task\dto\ProfileUpdateResponse.class
+com\campusworks\task\client\PaymentServiceClient.class
 com\campusworks\task\controller\TaskController$UpdateTaskStatusRequest.class
 com\campusworks\task\dto\BidResponse$BidResponseBuilder.class
 com\campusworks\task\service\TaskService$TaskStatistics$TaskStatisticsBuilder.class

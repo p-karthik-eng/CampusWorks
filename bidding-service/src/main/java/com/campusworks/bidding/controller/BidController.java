@@ -698,6 +698,35 @@ public class BidController {
     }
     
     /**
+     * Complete the winning bid for a task
+     * Internal endpoint called by Payment Service when escrow is released
+     */
+    @PutMapping("/task/{taskId}/complete")
+    public ResponseEntity<?> completeBidForTask(@PathVariable Long taskId) {
+        log.info("📥 Request to complete bid for task ID: {}", taskId);
+        
+        try {
+            Bid bid = biddingService.completeBidForTask(taskId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Bid completed successfully");
+            response.put("bidId", bid.getId());
+            response.put("taskId", bid.getTaskId());
+            response.put("status", bid.getStatus());
+            response.put("updatedAt", bid.getUpdatedAt());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("❌ Failed to complete bid for task ID: {} - Error: {}", taskId, e.getMessage(), e);
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to complete bid");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+    }
+    
+    /**
      * Get accepted bid with UPI ID for a task
      */
     @GetMapping("/task/{taskId}/accepted-with-upi")

@@ -41,7 +41,8 @@ const EditTaskPage = () => {
       description: '',
       category: '',
       budget: '',
-      deadline: ''
+      biddingDeadline: '',
+      completionDeadline: ''
     }
   });
 
@@ -79,7 +80,9 @@ const EditTaskPage = () => {
         description: taskData.description,
         category: taskData.category,
         budget: taskData.budget.toString(),
-        deadline: taskData.completionDeadline ? 
+        biddingDeadline: taskData.biddingDeadline ? 
+          new Date(taskData.biddingDeadline).toLocaleString('sv-SE').slice(0, 16) : '',
+        completionDeadline: taskData.completionDeadline ? 
           new Date(taskData.completionDeadline).toLocaleString('sv-SE').slice(0, 16) : ''
       });
       
@@ -99,22 +102,25 @@ const EditTaskPage = () => {
       // Additional validation before submission
       const budget = parseFloat(data.budget);
       
-      if (isNaN(budget) || budget < 50 || budget > 10000) {
-        setError('Budget must be between ₹50 and ₹10,000.');
+      if (isNaN(budget) || budget < 0) {
+        setError('Budget must be a non-negative number.');
         setSaving(false);
         return; // Don't submit if budget is invalid
       }
       
-      // Format the deadline properly for the backend (convert to IST)
-      const formattedDeadline = data.deadline ? 
-        new Date(data.deadline + ':00').toISOString() : null;
+      // Format the deadlines properly for the backend
+      const formattedBiddingDeadline = data.biddingDeadline ? 
+        data.biddingDeadline + (data.biddingDeadline.split(':').length === 2 ? ':00' : '') : null;
+      const formattedCompletionDeadline = data.completionDeadline ? 
+        data.completionDeadline + (data.completionDeadline.split(':').length === 2 ? ':00' : '') : null;
       
       const taskData = {
         title: data.title,
         description: data.description,
         category: data.category,
         budget: budget,
-        completionDeadline: formattedDeadline
+        biddingDeadline: formattedBiddingDeadline,
+        completionDeadline: formattedCompletionDeadline
       };
 
       console.log('Updating task data:', taskData);
@@ -263,9 +269,9 @@ const EditTaskPage = () => {
                   control={control}
                   label="Budget (₹)"
                   type="number"
-                  placeholder="Enter your budget amount (₹50 - ₹10,000)"
+                  placeholder="Enter your budget amount"
                   required
-                  helperText="Budget must be between ₹50 and ₹10,000"
+                  helperText="Budget must be a non-negative number"
                   rules={{
                     required: 'Budget is required to update your task',
                     validate: {
@@ -278,15 +284,8 @@ const EditTaskPage = () => {
                       },
                       minAmount: (value) => {
                         const num = parseFloat(value);
-                        if (num < 50) {
-                          return 'Minimum budget is ₹50. Please enter a higher amount.';
-                        }
-                        return true;
-                      },
-                      maxAmount: (value) => {
-                        const num = parseFloat(value);
-                        if (num > 10000) {
-                          return 'Maximum budget is ₹10,000. Please enter a lower amount.';
+                        if (num < 0) {
+                          return 'Budget cannot be negative.';
                         }
                         return true;
                       }
@@ -295,38 +294,43 @@ const EditTaskPage = () => {
                 />
               </Grid>
 
-              {/* Deadline */}
+              {/* Bidding Deadline */}
               <Grid item xs={12} md={6}>
                 <FormField
-                  name="deadline"
+                  name="biddingDeadline"
                   control={control}
-                  label="Deadline"
+                  label="Bidding Deadline"
                   type="datetime-local"
                   required
                   rules={{
-                    required: 'Deadline is required',
+                    required: 'Bidding deadline is required',
                     validate: (value) => {
-                      const deadline = new Date(value);
+                      const biddingDate = new Date(value);
                       const now = new Date();
-                      
-                      // Calculate minimum deadline: Task Creation Time + Bidding Deadline Duration (7 days)
-                      const taskCreationTime = new Date(task.createdAt);
-                      const biddingDuration = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-                      const minDeadline = new Date(taskCreationTime.getTime() + biddingDuration);
-                      
-                      if (deadline <= now) {
-                        return 'Deadline must be in the future';
+                      if (biddingDate <= now) {
+                        return 'Bidding deadline must be in the future';
                       }
-                      if (deadline < minDeadline) {
-                        const minDeadlineStr = minDeadline.toLocaleString('en-IN', {
-                          timeZone: 'Asia/Kolkata',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        });
-                        return `Deadline must be after ${minDeadlineStr} IST (Task Creation + 7 days bidding period)`;
+                      return true;
+                    }
+                  }}
+                />
+              </Grid>
+
+              {/* Completion Deadline */}
+              <Grid item xs={12} md={6}>
+                <FormField
+                  name="completionDeadline"
+                  control={control}
+                  label="Completion Deadline"
+                  type="datetime-local"
+                  required
+                  rules={{
+                    required: 'Completion deadline is required',
+                    validate: (value, formValues) => {
+                      const completionDate = new Date(value);
+                      const biddingDate = new Date(formValues.biddingDeadline);
+                      if (completionDate <= biddingDate) {
+                        return 'Completion deadline must be after bidding deadline';
                       }
                       return true;
                     }

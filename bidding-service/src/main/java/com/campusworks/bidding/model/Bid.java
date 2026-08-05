@@ -41,8 +41,7 @@ public class Bid {
     private String bidderEmail;
     
     @NotNull(message = "Bid amount is required")
-    @DecimalMin(value = "50.00", message = "Bid amount must be at least ₹50.00")
-    @DecimalMax(value = "10000.00", message = "Bid amount cannot exceed ₹10,000.00")
+    @DecimalMin(value = "0.00", message = "Bid amount must be non-negative")
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
     
