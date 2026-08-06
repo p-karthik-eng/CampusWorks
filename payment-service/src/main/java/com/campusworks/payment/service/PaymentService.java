@@ -19,8 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.scheduling.annotation.Scheduled;
 
 /**
  * Payment Service Implementation
@@ -352,5 +354,38 @@ public class PaymentService {
      */
     public boolean isEscrowHeld(Long contractId) {
         return paymentRepository.existsByContractIdAndPaymentStatus(contractId, PaymentStatus.ESCROW_HELD);
+    }
+    
+    /**
+     * Scheduled task to check for expired task completion deadlines and auto-refund escrows
+     * Runs every 10 seconds for instant validation
+     */
+    @Scheduled(fixedDelay = 10000)
+    public void processExpiredEscrows() {
+        log.info("🔄 Running scheduled check for expired or cancelled escrows");
+        try {
+            List<Payment> heldPayments = paymentRepository.findByPaymentStatus(PaymentStatus.ESCROW_HELD);
+            for (Payment payment : heldPayments) {
+                try {
+                    TaskResponse task = taskServiceClient.getTaskById(payment.getContractId());
+                    if (task != null) {
+                        boolean isCancelled = "CANCELLED".equals(task.getStatus());
+                        boolean isDeadlinePassed = task.getCompletionDeadline() != null && 
+                                LocalDateTime.now().isAfter(task.getCompletionDeadline());
+                        
+                        if (isCancelled || isDeadlinePassed) {
+                            log.info("⏰ Escrow for contract ID: {} needs refund. Cancelled: {}, Deadline passed: {}", 
+                                    payment.getContractId(), isCancelled, isDeadlinePassed);
+                            refundPayment(payment.getContractId(), payment.getPayerId());
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("❌ Error checking task ID: {} for escrow refund: {}", 
+                            payment.getContractId(), e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.error("❌ Error in expired escrows scheduled job: {}", e.getMessage());
+        }
     }
 }

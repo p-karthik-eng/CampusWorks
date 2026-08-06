@@ -113,10 +113,23 @@ const TasksPage = () => {
       const tasksData = tasksRes.data || [];
       setTasks(tasksData);
 
-      // Fetch user's profile for earnings
+      // Fetch user's dynamic earnings from task-service with profile-service fallback
       if (user?.email) {
-        const profileRes = await apiService.profiles.getByUserEmail(user.email).catch(() => null);
-        setProfileEarnings(profileRes?.data?.totalEarnings || 0);
+        let totalEarnings = 0;
+        if (user.id) {
+          try {
+            const earningsRes = await apiService.tasks.getEarnings(user.id);
+            totalEarnings = earningsRes.data?.totalEarnings || 0;
+          } catch (err) {
+            console.error('Error fetching dynamic earnings:', err);
+            const profileRes = await apiService.profiles.getByUserEmail(user.email).catch(() => null);
+            totalEarnings = profileRes?.data?.totalEarnings || 0;
+          }
+        } else {
+          const profileRes = await apiService.profiles.getByUserEmail(user.email).catch(() => null);
+          totalEarnings = profileRes?.data?.totalEarnings || 0;
+        }
+        setProfileEarnings(totalEarnings);
 
         // Fetch user's submitted bids
         const bidsRes = await apiService.bids.getByUserEmail(user.email);
@@ -273,7 +286,7 @@ const TasksPage = () => {
   // Categorize lists for worker
   const activeWork = tasks.filter(t => 
     t.assignedUserEmail === user?.email && 
-    (t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED' || t.status === 'PENDING_CONFIRMATION')
+    (t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED' || t.status === 'PENDING_CONFIRMATION' || t.status === 'DISPUTED')
   );
 
   const completedWork = tasks.filter(t => 

@@ -252,11 +252,19 @@ public class BiddingService {
         if (winningBid.isPresent()) {
             log.info("✅ Winning bid found: ID: {}, Amount: ${}, Bidder: {}", 
                     winningBid.get().getId(), winningBid.get().getAmount(), winningBid.get().getBidderEmail());
-        } else {
-            log.info("ℹ️ No winning bid found for task ID: {}", taskId);
+            return winningBid;
         }
         
-        return winningBid;
+        // Fallback to manually accepted or completed bid
+        Optional<Bid> acceptedBid = bidRepository.findAcceptedOrCompletedBidForTask(taskId);
+        if (acceptedBid.isPresent()) {
+            log.info("✅ Accepted/Completed bid found: ID: {}, Amount: ${}, Bidder: {}", 
+                    acceptedBid.get().getId(), acceptedBid.get().getAmount(), acceptedBid.get().getBidderEmail());
+            return acceptedBid;
+        }
+        
+        log.info("ℹ️ No winning or accepted/completed bid found for task ID: {}", taskId);
+        return Optional.empty();
     }
     
     /**
@@ -1242,7 +1250,7 @@ public class BiddingService {
         
         try {
             // Get all task IDs that have pending or accepted bids
-            List<Long> taskIdsWithBids = bidRepository.findAllTaskIdsWithPendingBids();
+            List<Long> taskIdsWithBids = bidRepository.findAllTaskIdsWithPendingOrAcceptedBids();
             
             if (taskIdsWithBids.isEmpty()) {
                 log.debug("ℹ️ No tasks with bids found");

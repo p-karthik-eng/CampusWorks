@@ -206,7 +206,7 @@ const MyTasksPage = () => {
   });
 
   const assignedTasks = tasks.filter(t => 
-    t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED' || t.status === 'PENDING_CONFIRMATION'
+    t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED' || t.status === 'PENDING_CONFIRMATION' || t.status === 'DISPUTED'
   );
 
   const completedTasks = tasks.filter(t => 
@@ -459,7 +459,6 @@ const MyTasksPage = () => {
                         <TableCell sx={{ fontWeight: 600 }}>Bid Amount</TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>Proposal</TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -480,23 +479,6 @@ const MyTasksPage = () => {
                           </TableCell>
                           <TableCell>
                             <StatusBadge status={bid.status} />
-                          </TableCell>
-                          <TableCell align="right">
-                            <Box display="flex" justifyContent="flex-end" gap={1}>
-                              {bid.status === 'PENDING' && (
-                                <Button
-                                  size="small"
-                                  variant="contained"
-                                  color="success"
-                                  disabled={actionLoading}
-                                  onClick={() => handleAcceptBid(bid.id, bid.taskId)}
-                                  sx={{ borderRadius: '8px', textTransform: 'none' }}
-                                >
-                                  {acceptingBidId === bid.id ? 'Accepting...' : 'Accept Bid'}
-                                </Button>
-                              )}
-                              <ChatButton currentUser={user} taskTitle={bid.taskTitle} recipientEmail={bid.bidderEmail} taskId={bid.taskId} size="small" />
-                            </Box>
                           </TableCell>
                         </TableRow>
                       ))}

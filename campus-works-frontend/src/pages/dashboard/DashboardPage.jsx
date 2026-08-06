@@ -56,33 +56,48 @@ const DashboardPage = () => {
   const fetchDashboardStats = async () => {
     try {
       setLoading(true);
-      // Fetch open tasks for marketplace
-      const openTasksRes = await apiService.tasks.getOpenForBidding().catch(() => ({ data: [] }));
-      const openTasksCount = openTasksRes.data?.length || 0;
+      // Fetch all tasks to get open task count and active worker task statuses
+      const allTasksRes = await apiService.tasks.getAll().catch(() => ({ data: [] }));
+      const allTasks = allTasksRes.data || [];
+      const openTasksCount = allTasks.filter(t => t.status === 'OPEN' && t.ownerEmail !== user.email).length;
 
       // Fetch user's posted tasks
       const postedTasksRes = await apiService.tasks.getByOwnerEmail(user.email).catch(() => ({ data: [] }));
       const postedTasks = postedTasksRes.data || [];
       const postedTasksCount = postedTasks.length;
 
-      // Fetch user's profile for earnings
-      const profileRes = await apiService.profiles.getByUserEmail(user.email).catch(() => null);
-      const totalEarnings = profileRes?.data?.totalEarnings || 0;
+      // Fetch user's dynamic earnings from task-service with profile-service fallback
+      let totalEarnings = 0;
+      if (user.id) {
+        try {
+          const earningsRes = await apiService.tasks.getEarnings(user.id);
+          totalEarnings = earningsRes.data?.totalEarnings || 0;
+        } catch (err) {
+          console.error('Error fetching dynamic earnings:', err);
+          const profileRes = await apiService.profiles.getByUserEmail(user.email).catch(() => null);
+          totalEarnings = profileRes?.data?.totalEarnings || 0;
+        }
+      } else {
+        const profileRes = await apiService.profiles.getByUserEmail(user.email).catch(() => null);
+        totalEarnings = profileRes?.data?.totalEarnings || 0;
+      }
 
       // Fetch user's bids to check active contracts as worker
       const bidsRes = await apiService.bids.getByUserEmail(user.email).catch(() => ({ data: [] }));
       const bids = bidsRes.data || [];
       
       // Calculate active contracts:
-      // 1. Posted tasks where status is IN_PROGRESS, ASSIGNED, or PENDING_CONFIRMATION
+      // 1. Posted tasks where status is IN_PROGRESS, ASSIGNED, PENDING_CONFIRMATION, or DISPUTED
       const activePostedCount = postedTasks.filter(t => 
-        t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED' || t.status === 'PENDING_CONFIRMATION'
+        t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED' || t.status === 'PENDING_CONFIRMATION' || t.status === 'DISPUTED'
       ).length;
       
-      // 2. Worker bids that are ACCEPTED and task status is not COMPLETED
-      const activeWorkerCount = bids.filter(b => 
-        b.status === 'ACCEPTED' && b.taskStatus !== 'COMPLETED'
-      ).length;
+      // 2. Worker bids that are ACCEPTED and the task actually exists and is active (IN_PROGRESS, ASSIGNED, PENDING_CONFIRMATION, or DISPUTED)
+      const activeWorkerCount = bids.filter(b => {
+        if (b.status !== 'ACCEPTED') return false;
+        const task = allTasks.find(t => t.id === b.taskId);
+        return task && (task.status === 'IN_PROGRESS' || task.status === 'ASSIGNED' || task.status === 'PENDING_CONFIRMATION' || task.status === 'DISPUTED');
+      }).length;
 
       setStats({
         tasksPosted: postedTasksCount,

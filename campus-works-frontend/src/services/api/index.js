@@ -122,7 +122,8 @@ export const apiService = {
     complete: (id) => api.post(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/complete`),
     accept: (id) => api.post(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/accept`),
     cancel: (id) => api.post(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/cancel`),
-    updateStatus: (id, status) => api.put(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/status`, { status })
+    updateStatus: (id, status) => api.put(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/${id}/status`, { status }),
+    getEarnings: (userId) => api.get(`${API_CONFIG.ENDPOINTS.TASKS.BASE}/user/${userId}/earnings`)
   },
   
   // Bidding methods
@@ -202,7 +203,28 @@ export const apiUtils = {
   // Get user data
   getUserData: () => {
     const userData = localStorage.getItem(STORAGE_KEYS.USER_DATA);
-    return userData ? JSON.parse(userData) : null;
+    let userObj = userData ? JSON.parse(userData) : null;
+    
+    // Auto-enrich user ID and email from JWT token if available
+    const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+    if (token) {
+      try {
+        const payload = token.split('.')[1];
+        const decodedPayload = JSON.parse(atob(payload));
+        if (!userObj) {
+          userObj = {};
+        }
+        if (!userObj.id && decodedPayload.sub) {
+          userObj.id = decodedPayload.sub;
+        }
+        if (!userObj.email && decodedPayload.email) {
+          userObj.email = decodedPayload.email;
+        }
+      } catch (e) {
+        console.error('Error auto-enriching user data from token:', e);
+      }
+    }
+    return userObj;
   },
   
   // Set user data

@@ -4,6 +4,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -17,6 +19,8 @@ import java.util.List;
 @SpringBootApplication
 @EnableDiscoveryClient
 @EnableFeignClients
+@EnableScheduling
+@EnableAsync
 public class PaymentServiceApplication {
     public static void main(String[] args) {
         // Load configurations from .env before Spring starts

@@ -193,28 +193,113 @@ const TaskDetailPage = () => {
     navigate(-1);
   };
 
-  // 1. Pay securely to hold in Escrow
+  // 1. Pay securely to hold in Escrow (Razorpay with Mock Fallback)
   const handleDepositEscrow = async () => {
+    if (processingAction) return;
     try {
       setProcessingAction(true);
-      const res = await apiService.payments.depositEscrow(id);
-      if (res.data) {
-        dispatch(showEmailSuccessToast('payment_successful'));
-        setPayDialogOpen(false);
-        // Refresh details
-        await fetchTaskDetails();
-        await fetchPaymentDetails();
+
+      // Load Razorpay script dynamically
+      const loadScript = () => {
+        return new Promise((resolve) => {
+          if (window.Razorpay) {
+            resolve(true);
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.onload = () => resolve(true);
+          script.onerror = () => resolve(false);
+          document.body.appendChild(script);
+        });
+      };
+
+      const scriptLoaded = await loadScript();
+      if (!scriptLoaded) {
+        throw new Error('Failed to load Razorpay SDK. Please check your internet connection.');
       }
+
+      // Try to create Razorpay Order
+      let order = null;
+      try {
+        const orderRes = await apiService.payments.createOrder(id);
+        order = orderRes.data;
+      } catch (orderErr) {
+        console.warn('Razorpay order creation failed, falling back to mock escrow deposit:', orderErr);
+        // Fallback to mock direct deposit
+        const res = await apiService.payments.depositEscrow(id);
+        if (res.data) {
+          dispatch(showEmailSuccessToast('payment_successful'));
+          setPayDialogOpen(false);
+          await fetchTaskDetails();
+          await fetchPaymentDetails();
+        }
+        return;
+      }
+
+      if (!order) {
+        throw new Error('Could not generate payment order details.');
+      }
+
+      // Open Razorpay Checkout Modal
+      const options = {
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'CampusWorks',
+        description: `Escrow Payment for task: ${task?.title || 'Contract'}`,
+        order_id: order.orderId,
+        handler: async function (response) {
+          try {
+            setProcessingAction(true);
+            const verifyRes = await apiService.payments.verifyPayment(id, {
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpaySignature: response.razorpay_signature,
+              paymentMethod: 'RAZORPAY_CARD_UPI'
+            });
+            if (verifyRes.data) {
+              dispatch(showEmailSuccessToast('payment_successful'));
+              setPayDialogOpen(false);
+              await fetchTaskDetails();
+              await fetchPaymentDetails();
+            }
+          } catch (err) {
+            console.error('Error verifying payment:', err);
+            alert(err.response?.data?.message || 'Payment verification failed. Please try again.');
+          } finally {
+            setProcessingAction(false);
+          }
+        },
+        prefill: {
+          email: user?.email || '',
+        },
+        theme: {
+          color: '#1976D2'
+        },
+        modal: {
+          ondismiss: function () {
+            setProcessingAction(false);
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+
     } catch (err) {
       console.error('Error funding escrow:', err);
-      alert(err.response?.data?.message || 'Failed to fund escrow. Please try again.');
+      alert(err.message || 'Failed to fund escrow. Please try again.');
     } finally {
-      setProcessingAction(false);
+      if (!window.Razorpay || !processingAction) {
+        setProcessingAction(false);
+      }
     }
   };
 
   // 2. Worker marks task completed
   const handleMarkWorkCompleted = async () => {
+    if (processingAction) return;
     if (window.confirm('Are you sure you want to mark this task as completed? This will request the owner to release the escrow payment.')) {
       try {
         setProcessingAction(true);
@@ -234,6 +319,7 @@ const TaskDetailPage = () => {
 
   // 3. Requester accepts work to release escrow funds
   const handleConfirmAcceptWork = async () => {
+    if (processingAction) return;
     try {
       setProcessingAction(true);
       const res = await apiService.payments.releaseEscrow(id);
@@ -256,6 +342,7 @@ const TaskDetailPage = () => {
 
   // 4. Requester raises a dispute
   const handleConfirmDispute = async () => {
+    if (processingAction) return;
     if (!disputeReason.trim()) {
       alert('Please provide a reason for raising an issue.');
       return;

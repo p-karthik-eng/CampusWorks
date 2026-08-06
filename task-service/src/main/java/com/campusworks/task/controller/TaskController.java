@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.campusworks.task.client.BiddingServiceClient;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -27,6 +28,7 @@ import java.util.Optional;
 public class TaskController {
     
     private final TaskService taskService;
+    private final BiddingServiceClient biddingServiceClient;
     
     /**
      * Create a new task
@@ -203,9 +205,20 @@ public class TaskController {
                     .filter(task -> task.getStatus() == Task.TaskStatus.COMPLETED)
                     .toList();
             
-            java.math.BigDecimal totalEarnings = completedTasks.stream()
-                    .map(Task::getBudget)
-                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            java.math.BigDecimal totalEarnings = java.math.BigDecimal.ZERO;
+            for (Task task : completedTasks) {
+                try {
+                    com.campusworks.task.dto.BidResponse winningBid = biddingServiceClient.getWinningBidForTask(task.getId());
+                    if (winningBid != null && winningBid.getAmount() != null) {
+                        totalEarnings = totalEarnings.add(winningBid.getAmount());
+                    } else {
+                        totalEarnings = totalEarnings.add(task.getBudget());
+                    }
+                } catch (Exception e) {
+                    log.warn("⚠️ Failed to retrieve winning bid for task ID: {}, using budget instead. Error: {}", task.getId(), e.getMessage());
+                    totalEarnings = totalEarnings.add(task.getBudget());
+                }
+            }
             
             Map<String, Object> response = new HashMap<>();
             response.put("userId", userId);
@@ -213,7 +226,7 @@ public class TaskController {
             response.put("completedTasksCount", completedTasks.size());
             response.put("completedTasks", completedTasks);
             
-            log.info("✅ Retrieved earnings for user ID: {} - Total: ${}", userId, totalEarnings);
+            log.info("✅ Retrieved earnings for user ID: {} - Total: ₹{}", userId, totalEarnings);
             
             return ResponseEntity.ok(response);
             
@@ -249,10 +262,22 @@ public class TaskController {
                     .filter(task -> task.getStatus() == Task.TaskStatus.CANCELLED)
                     .count();
             
-            java.math.BigDecimal totalEarnings = allTasks.stream()
-                    .filter(task -> task.getStatus() == Task.TaskStatus.COMPLETED)
-                    .map(Task::getBudget)
-                    .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+            java.math.BigDecimal totalEarnings = java.math.BigDecimal.ZERO;
+            for (Task task : allTasks) {
+                if (task.getStatus() == Task.TaskStatus.COMPLETED) {
+                    try {
+                        com.campusworks.task.dto.BidResponse winningBid = biddingServiceClient.getWinningBidForTask(task.getId());
+                        if (winningBid != null && winningBid.getAmount() != null) {
+                            totalEarnings = totalEarnings.add(winningBid.getAmount());
+                        } else {
+                            totalEarnings = totalEarnings.add(task.getBudget());
+                        }
+                    } catch (Exception e) {
+                        log.warn("⚠️ Failed to retrieve winning bid for task ID: {} during statistics calculation. Error: {}", task.getId(), e.getMessage());
+                        totalEarnings = totalEarnings.add(task.getBudget());
+                    }
+                }
+            }
             
             Map<String, Object> response = new HashMap<>();
             response.put("userId", userId);
@@ -263,8 +288,8 @@ public class TaskController {
             response.put("totalEarnings", totalEarnings);
             response.put("completionRate", totalTasks > 0 ? (double) completedTasks / totalTasks : 0.0);
             
-            log.info("✅ Retrieved task statistics for user ID: {} - Total: {}, Completed: {}, Active: {}", 
-                    userId, totalTasks, completedTasks, activeTasks);
+            log.info("✅ Retrieved task statistics for user ID: {} - Total: {}, Completed: {}, Active: {}, Total Earnings: ₹{}", 
+                    userId, totalTasks, completedTasks, activeTasks, totalEarnings);
             
             return ResponseEntity.ok(response);
             

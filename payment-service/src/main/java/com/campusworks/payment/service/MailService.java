@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -25,6 +26,7 @@ public class MailService {
     /**
      * Send email notification that escrow payment has been received and held
      */
+    @Async
     public void sendEscrowHeldNotification(String payerEmail, String receiverEmail, String taskTitle, BigDecimal amount) {
         // Notify Payer
         try {
@@ -79,6 +81,7 @@ public class MailService {
     /**
      * Send email notification that escrow has been released to the worker
      */
+    @Async
     public void sendPaymentReleasedNotification(String payerEmail, String receiverEmail, String taskTitle, BigDecimal amount) {
         // Notify Payer
         try {
@@ -132,6 +135,7 @@ public class MailService {
     /**
      * Send email notification that payment has been refunded to the payer
      */
+    @Async
     public void sendPaymentRefundedNotification(String payerEmail, String receiverEmail, String taskTitle, BigDecimal amount) {
         // Notify Payer
         try {

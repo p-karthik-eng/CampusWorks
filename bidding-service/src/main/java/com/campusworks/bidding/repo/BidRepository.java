@@ -231,12 +231,15 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
            "ORDER BY b.createdAt ASC")
     List<Bid> findLowestBidsForTaskOrderedByTime(@Param("taskId") Long taskId);
     
-    /**
-     * Find all task IDs that have pending bids
-     * This is used to identify tasks that might need automatic bid selection
-     */
     @Query("SELECT DISTINCT b.taskId FROM Bid b WHERE b.status = 'PENDING'")
     List<Long> findAllTaskIdsWithPendingBids();
+    
+    /**
+     * Find all task IDs that have pending or accepted bids
+     * This is used to check deadlines for both open and active/assigned tasks
+     */
+    @Query("SELECT DISTINCT b.taskId FROM Bid b WHERE b.status = 'PENDING' OR b.status = 'ACCEPTED'")
+    List<Long> findAllTaskIdsWithPendingOrAcceptedBids();
     
     // ==================== UPI ID OPERATIONS ====================
     
@@ -251,6 +254,12 @@ public interface BidRepository extends JpaRepository<Bid, Long> {
      */
     @Query("SELECT b FROM Bid b WHERE b.taskId = :taskId AND b.status = 'ACCEPTED'")
     Optional<Bid> findAcceptedBidForTask(@Param("taskId") Long taskId);
+    
+    /**
+     * Find accepted or completed bid for a specific task
+     */
+    @Query("SELECT b FROM Bid b WHERE b.taskId = :taskId AND (b.status = 'ACCEPTED' OR b.status = 'COMPLETED')")
+    Optional<Bid> findAcceptedOrCompletedBidForTask(@Param("taskId") Long taskId);
     
     /**
      * Find bids with UPI ID submitted but not viewed
