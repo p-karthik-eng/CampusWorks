@@ -41,6 +41,9 @@ public class EmailService {
     @Value("${app.name:CampusWorks}")
     private String appName;
 
+    @Value("${app.verification.token.expiry:24}")
+    private int tokenExpiryHours;
+
     /**
      * Send email verification email to user
      */
@@ -162,7 +165,7 @@ public class EmailService {
         context.setVariable("verificationUrl", verificationUrl);
         context.setVariable("appName", appName);
         context.setVariable("frontendUrl", frontendUrl);
-        context.setVariable("expiryHours", "24");
+        context.setVariable("expiryMinutes", tokenExpiryHours * 60);
 
         try {
             return templateEngine.process("verification-email", context);
@@ -199,7 +202,7 @@ public class EmailService {
         context.setVariable("userEmail", user.getEmail());
         context.setVariable("resetUrl", resetUrl);
         context.setVariable("appName", appName);
-        context.setVariable("expiryHours", "24");
+        context.setVariable("expiryMinutes", tokenExpiryHours * 60);
 
         try {
             return templateEngine.process("password-reset-email", context);

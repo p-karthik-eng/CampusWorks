@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Welcome to [[${appName}]]</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #4CAF50; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { background: #f9f9f9; padding: 30px; border: 1px solid #ddd; }
+        .button { display: inline-block; background: #2196F3; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 10px 5px; }
+        .footer { background: #333; color: white; padding: 15px; text-align: center; font-size: 12px; border-radius: 0 0 5px 5px; }
+        .feature { background: white; padding: 15px; margin: 10px 0; border-left: 4px solid #2196F3; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎉 Welcome to <span th:text="${appName}">CampusWorks</span>!</h1>
+        <p>Your account is now active</p>
+    </div>
+    <div class="content">
+        <h2>Hello <span th:text="${userName}">Student</span>! 🎓</h2>
+        <p>Congratulations! Your email has been verified and your <span th:text="${appName}">CampusWorks</span> account is now active.</p>
+        
+        <h3>🚀 What can you do now?</h3>
+        
+        <div class="feature">
+            <h4>📝 Post Academic Tasks</h4>
+            <p>Need help with assignments, projects, or research? Post your tasks and get bids from fellow students.</p>
+        </div>
+        
+        <div class="feature">
+            <h4>💰 Earn Money</h4>
+            <p>Use your skills to help other students and earn money by bidding on tasks you can complete.</p>
+        </div>
+        
+        <div class="feature">
+            <h4>🔒 Secure Payments</h4>
+            <p>All payments are handled securely through our escrow system for your protection.</p>
+        </div>
+        
+        <div class="feature">
+            <h4>⭐ Build Reputation</h4>
+            <p>Complete tasks successfully to build your reputation and attract more opportunities.</p>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <a th:href="${frontendUrl} + '/login'" class="button">🚀 Start Using <span th:text="${appName}">CampusWorks</span></a>
+            <a th:href="${frontendUrl} + '/dashboard'" class="button">📊 Go to Dashboard</a>
+        </div>
+        
+        <hr>
+        <p>Need help getting started? Check out our platform and explore the features!</p>
+        <p>Happy learning and earning! 🎓💰</p>
+    </div>
+    <div class="footer">
+        <p>&copy; 2024 <span th:text="${appName}">CampusWorks</span> - RGUKT Nuzvidu Academic Platform</p>
+        <p>Connecting students for academic success</p>
+    </div>
+</body>
+</html>
